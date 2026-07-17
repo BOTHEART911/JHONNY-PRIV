@@ -1852,3 +1852,15 @@ body.ag-selecting .ag-cell { cursor: default; }
   body.wide .bot-body > .bot-card { margin: 0; }
   body.wide .bot-status { max-width: none; }
 }
+
+/* FIX: tabla de asistentes — thead encima, no al lado */
+table.asis-t { display: table !important; width: 100%; border-collapse: collapse; }
+table.asis-t thead { display: table-header-group !important; }
+table.asis-t tbody { display: table-row-group !important; }
+table.asis-t tr { display: table-row !important; }
+table.asis-t th, table.asis-t td { display: table-cell !important; }
+@media (max-width: 640px) {
+  table.asis-t thead { display: none !important; }
+  table.asis-t, table.asis-t tbody, table.asis-t tr { display: block !important; }
+  table.asis-t td { display: flex !important; }
+}
