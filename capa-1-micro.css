@@ -1,0 +1,150 @@
+/* ============================================================
+ * CAPA 1 · MICRO-EFECTOS BASE — app PRIVADA (JHONNY PRIV)
+ * ------------------------------------------------------------
+ * QUÉ HACE
+ *   Presión con resorte al tocar botones, mosaicos del Inicio,
+ *   chips, segmentos, teclado PIN y botones de tarjeta; rebote
+ *   suave del segmento/chip activo; aparición de pantalla;
+ *   entrada escalonada de las listas (.bd-grid); apertura de
+ *   las hojas (.sheet) con curva más viva.
+ *
+ * INSTALACIÓN (una sola línea, en el <head>, DESPUÉS de style.css)
+ *   <link rel="stylesheet" href="capa-1-micro.css" />
+ *
+ * PAREJA
+ *   Ninguna. Es autónoma (solo CSS).
+ *
+ * NOTAS
+ *   - Prefijo propio: np-  (NO uso nt-: en esta app ese prefijo ya
+ *     es del módulo NOTICIAS: .nt-kpi, .nt-celebra, @keyframes nt-pop).
+ *   - La "aparición de pantalla" se apaga sola cuando la capa 4
+ *     está instalada (marca <html class="np-tx">) para que no se
+ *     peleen las dos animaciones.
+ *   - Respeta prefers-reduced-motion (bloque al final).
+ *   - Para quitar la capa: borra la línea del <head>. Nada más.
+ * ============================================================ */
+
+/* ---------- 1. Presión con resorte en lo tocable ---------- */
+.btn,
+.tile,
+.chip,
+.bd-chip,
+.seg-b,
+.icon-btn,
+.pin-key,
+.bd-btn,
+.acc-chip,
+.estado-opt,
+.combo-opt,
+.sbar-toggle,
+button.nt-kpi,
+.cm-kpi,
+.an-bar-row[role="button"] {
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1),
+              background .15s ease,
+              box-shadow .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:active,
+.acc-chip:active,
+.estado-opt:active,
+.combo-opt:active,
+.sbar-toggle:active,
+button.nt-kpi:active,
+.cm-kpi:active,
+.an-bar-row[role="button"]:active { transform: scale(.965); }
+
+.tile:not(.soon):active { transform: scale(.955); }
+.tile.soon:active { transform: none; }
+
+.chip:active,
+.bd-chip:active,
+.seg-b:active,
+.bd-btn:active { transform: scale(.94); }
+
+.icon-btn:active { transform: scale(.88); }
+.pin-key:active { transform: scale(.92); }
+.pin-key.action:active { transform: scale(.9); }
+
+/* Un botón desactivado no debe "responder" al toque */
+.btn:disabled:active,
+.bd-btn:disabled:active,
+.pin-key:disabled:active,
+button:disabled:active { transform: none; }
+
+/* ---------- 2. Rebote del segmento / chip activo ---------- */
+.seg-b.active,
+.bd-chip.active { animation: np-pop-in .34s cubic-bezier(.34, 1.56, .64, 1); }
+
+@keyframes np-pop-in {
+  0%   { transform: scale(.86); }
+  60%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- 3. Aparición de pantalla ---------- */
+/* Solo si la capa 4 (transición lateral) NO está instalada. */
+html:not(.np-tx) #app:not([hidden]) { animation: np-view-fade .26s ease-out; }
+
+@keyframes np-view-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- 4. Entrada escalonada de listas ---------- */
+/* Todas las listas de la app envuelven sus tarjetas en .bd-grid
+   (bd-grid, ld-grid, ev-grid, cm-grid, nt-grid). */
+.bd-grid > * { animation: np-item-in .32s ease-out backwards; }
+.bd-grid > *:nth-child(1) { animation-delay: .02s; }
+.bd-grid > *:nth-child(2) { animation-delay: .05s; }
+.bd-grid > *:nth-child(3) { animation-delay: .08s; }
+.bd-grid > *:nth-child(4) { animation-delay: .11s; }
+.bd-grid > *:nth-child(5) { animation-delay: .14s; }
+.bd-grid > *:nth-child(6) { animation-delay: .17s; }
+.bd-grid > *:nth-child(7) { animation-delay: .20s; }
+.bd-grid > *:nth-child(8) { animation-delay: .23s; }
+.bd-grid > *:nth-child(n+9) { animation-delay: .26s; }
+
+@keyframes np-item-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- 5. "Pop" al abrir hojas / modales ---------- */
+/* style.css ya trae `animation: up .28s`; lo sustituyo con una curva
+   con un pelín de resorte. Necesita !important por ser la misma
+   especificidad y estar declarado en otro archivo. */
+.sheet { animation: np-sheet-in .34s cubic-bezier(.2, .9, .25, 1.04) !important; }
+
+@keyframes np-sheet-in {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
+}
+
+/* El toast entra con un empujón corto */
+.toast { animation: np-toast-in .26s cubic-bezier(.34, 1.56, .64, 1); }
+
+@keyframes np-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- 6. Reducir movimiento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .btn, .tile, .chip, .bd-chip, .seg-b, .icon-btn, .pin-key, .bd-btn,
+  .acc-chip, .estado-opt, .combo-opt, .sbar-toggle, button.nt-kpi,
+  .cm-kpi, .an-bar-row[role="button"] { transition: none; }
+
+  .btn:active, .tile:not(.soon):active, .chip:active, .bd-chip:active,
+  .seg-b:active, .icon-btn:active, .pin-key:active, .bd-btn:active,
+  .acc-chip:active, .estado-opt:active, .combo-opt:active,
+  .sbar-toggle:active, button.nt-kpi:active, .cm-kpi:active,
+  .an-bar-row[role="button"]:active { transform: none; }
+
+  .seg-b.active, .bd-chip.active,
+  html:not(.np-tx) #app:not([hidden]),
+  .bd-grid > *, .toast { animation: none; }
+
+  .sheet { animation: none !important; }
+}

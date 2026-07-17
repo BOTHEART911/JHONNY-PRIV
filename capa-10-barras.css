@@ -1,0 +1,30 @@
+/* ============================================================
+ * CAPA 10 · BARRAS QUE CRECEN (CSS) — app PRIVADA (JHONNY PRIV)
+ * ------------------------------------------------------------
+ * QUÉ HACE
+ *   Da la transición con la que las barras del Dashboard, el
+ *   Simulador, Votación, Líderes y Análisis suben desde cero.
+ *
+ * INSTALACIÓN (en el <head>, DESPUÉS de style.css)
+ *   <link rel="stylesheet" href="capa-10-barras.css" />
+ *
+ * PAREJA
+ *   capa-10-barras.js (obligatoria: el JS pone las barras en cero y las suelta).
+ *
+ * NOTAS
+ *   - !important porque .dbar-g / .dbar-r / .vc-fill ya traen
+ *     `transition: width .3s` en style.css y necesito la curva larga
+ *     solo mientras dura el crecimiento.
+ *   - La clase np-bar-anim la pone y la quita el JS: fuera de esa
+ *     ventana, las barras se comportan exactamente como antes.
+ *   - Respeta prefers-reduced-motion (el JS ni siquiera anima).
+ * ============================================================ */
+
+.np-bar-anim {
+  transition: width .62s cubic-bezier(.22, .78, .28, 1) !important;
+  will-change: width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .np-bar-anim { transition: none !important; }
+}

@@ -1,0 +1,56 @@
+/* ============================================================
+ * CAPA 7 · ONDA AL TOCAR / RIPPLE (CSS) — app PRIVADA (JHONNY PRIV)
+ * ------------------------------------------------------------
+ * QUÉ HACE
+ *   Onda de tinta estilo Android que sale del punto exacto donde
+ *   pusiste el dedo, en botones, mosaicos, chips, teclado y accesos.
+ *
+ * INSTALACIÓN (en el <head>, DESPUÉS de style.css)
+ *   <link rel="stylesheet" href="capa-7-ripple.css" />
+ *
+ * PAREJA
+ *   capa-7-ripple.js (obligatoria: el JS crea la onda; este CSS la dibuja).
+ *
+ * NOTAS
+ *   - Decorativa ligera: no cambia ningún comportamiento.
+ *   - El recorte (overflow:hidden) se hace aquí, en CSS, para no tocar
+ *     los estilos originales.
+ *   - CUIDADO al editar: NO añadir reglas del tipo `.btn > *` sin
+ *     excluir .np-ripple. Esa mezcla ya rompió la capa equivalente de
+ *     la app pública (la onda entraba en el flujo y ensanchaba el botón).
+ *   - Respeta prefers-reduced-motion: no se dibuja onda.
+ * ============================================================ */
+
+.btn,
+.tile,
+.chip,
+.bd-chip,
+.seg-b,
+.icon-btn,
+.pin-key,
+.bd-btn,
+.acc-chip,
+.estado-opt,
+.combo-opt,
+.sbar-toggle,
+button.nt-kpi,
+.cm-kpi { overflow: hidden; }
+
+.np-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background: currentColor;
+  opacity: .22;
+  transform: scale(0);
+  animation: np-ripple-go .58s cubic-bezier(.25, .8, .25, 1) forwards;
+}
+
+@keyframes np-ripple-go {
+  to { transform: scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .np-ripple { display: none; }
+}

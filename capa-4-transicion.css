@@ -1,0 +1,43 @@
+/* ============================================================
+ * CAPA 4 · TRANSICIÓN LATERAL ENTRE PANTALLAS (CSS)
+ * app PRIVADA (JHONNY PRIV)
+ * ------------------------------------------------------------
+ * QUÉ HACE
+ *   Estilo iOS: la pantalla nueva entra deslizándose desde la
+ *   derecha; cuando el movimiento es "atrás", entra desde la
+ *   izquierda.
+ *
+ * INSTALACIÓN (en el <head>, DESPUÉS de style.css)
+ *   <link rel="stylesheet" href="capa-4-transicion.css" />
+ *
+ * PAREJA
+ *   capa-4-transicion.js  (obligatoria: sin el JS este CSS no hace nada).
+ *
+ * NOTAS
+ *   - Prefijo np- (nt- ya lo usa el módulo Noticias de esta app).
+ *   - Mientras dura la animación, <html> lleva la clase np-tx-anim
+ *     para recortar el desbordamiento horizontal y que no aparezca
+ *     una barra de scroll de medio segundo.
+ *   - Respeta prefers-reduced-motion.
+ * ============================================================ */
+
+html.np-tx-anim,
+html.np-tx-anim body { overflow-x: hidden; }
+
+#app.np-view-in   { animation: np-slide-in   .30s cubic-bezier(.32, .72, 0, 1); }
+#app.np-view-back { animation: np-slide-back .30s cubic-bezier(.32, .72, 0, 1); }
+
+@keyframes np-slide-in {
+  from { opacity: .35; transform: translate3d(22%, 0, 0); }
+  to   { opacity: 1;   transform: none; }
+}
+
+@keyframes np-slide-back {
+  from { opacity: .35; transform: translate3d(-22%, 0, 0); }
+  to   { opacity: 1;   transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app.np-view-in,
+  #app.np-view-back { animation: none; }
+}

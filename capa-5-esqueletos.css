@@ -1,0 +1,75 @@
+/* ============================================================
+ * CAPA 5 · ESQUELETOS DE CARGA (CSS) — app PRIVADA (JHONNY PRIV)
+ * ------------------------------------------------------------
+ * QUÉ HACE
+ *   Da forma a las siluetas grises con brillo que sustituyen al
+ *   girador de las LISTAS mientras cargan.
+ *
+ * INSTALACIÓN (en el <head>, DESPUÉS de style.css)
+ *   <link rel="stylesheet" href="capa-5-esqueletos.css" />
+ *
+ * PAREJA
+ *   capa-5-esqueletos.js (obligatoria: el JS es quien mete estas piezas).
+ *
+ * NOTAS
+ *   - CSS propio y autónomo: NO depende de la clase .skeleton que ya
+ *     existe en style.css (así, si esa clase cambia, esta capa no se rompe).
+ *   - NO toca el girador global #ios-loader (guardar/cobrar/login) ni el
+ *     spinner que saving() mete dentro de los botones.
+ *   - Respeta prefers-reduced-motion: se queda quieto en gris.
+ * ============================================================ */
+
+.np-sk-wrap { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 8px; }
+
+.np-sk {
+  background: linear-gradient(90deg, #E7ECF2 25%, #F3F6FA 37%, #E7ECF2 63%);
+  background-size: 400% 100%;
+  animation: np-sk-shine 1.3s ease infinite;
+  border-radius: 8px;
+  display: block;
+}
+
+@keyframes np-sk-shine {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* --- piezas --- */
+.np-sk-line   { height: 12px; }
+.np-sk-line.np-w90 { width: 90%; }
+.np-sk-line.np-w70 { width: 70%; }
+.np-sk-line.np-w55 { width: 55%; }
+.np-sk-line.np-w40 { width: 40%; }
+.np-sk-line.np-w25 { width: 25%; }
+.np-sk-title  { height: 15px; width: 60%; border-radius: 9px; }
+.np-sk-round  { width: 42px; height: 42px; border-radius: 50%; flex: 0 0 42px; }
+.np-sk-sq     { width: 54px; height: 54px; border-radius: 12px; flex: 0 0 54px; }
+.np-sk-media  { height: 110px; border-radius: 12px; }
+.np-sk-bar    { height: 16px; border-radius: 6px; }
+.np-sk-block  { height: 240px; border-radius: 14px; }
+
+/* --- tarjetas contenedoras (imitan .card / .bd-card) --- */
+.np-sk-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(16, 40, 70, .06);
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.np-sk-card.np-col { flex-direction: column; align-items: stretch; gap: 10px; }
+.np-sk-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* --- fila de KPIs --- */
+.np-sk-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.np-sk-kpi  { height: 62px; border-radius: 12px; }
+@media (max-width: 560px) { .np-sk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- grupo de barras --- */
+.np-sk-barrow { display: flex; flex-direction: column; gap: 6px; }
+.np-sk-barrow .np-sk-line { height: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .np-sk { animation: none; background: #E7ECF2; }
+}
