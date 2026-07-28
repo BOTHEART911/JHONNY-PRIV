@@ -1,0 +1,369 @@
+/* ================================================================
+   CAPA 11 · INSIGHTS CON IA — app PRIVADA (JHONNY PRIV)
+   Pareja obligatoria de capa-11-insights.js.
+   Instalación: <link rel="stylesheet" href="capa-11-insights.css">
+   en el <head>, DESPUÉS de style.css y ANTES de tema-oscuro.css.
+
+   MODO OSCURO: no hay un solo color fijo aquí. Todo sale de las
+   variables del sistema (--surface, --ink, --line, --brand…), así que
+   el tema oscuro voltea esta capa sola, sin reglas extra.
+   ================================================================ */
+
+/* ---------- Botón flotante ---------- */
+.ia-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand);
+  font-family: var(--font-display), var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--sh-2);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.ia-fab:hover { transform: translateY(-2px); }
+.ia-fab:active { transform: translateY(0) scale(.97); }
+.ia-fab:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+.ia-fab-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--brand-050);
+  color: var(--brand);
+}
+.ia-fab-tx { padding-right: 2px; }
+
+/* Anillo que respira: es el único adorno, y se apaga solo si el sistema
+   pide menos movimiento o si la pantalla es angosta. */
+.ia-fab-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1.5px solid var(--brand);
+  opacity: 0;
+  animation: ia-respira 3.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes ia-respira {
+  0%   { opacity: .45; transform: scale(1); }
+  70%  { opacity: 0;   transform: scale(1.12); }
+  100% { opacity: 0;   transform: scale(1.12); }
+}
+.ia-fab.ia-sin-motor .ia-fab-ring { animation: none; display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ia-fab, .ia-fab:hover, .ia-fab:active { transition: none; transform: none; }
+  .ia-fab-ring { animation: none; display: none; }
+}
+/* En móvil angosto se queda solo el icono, para no tapar contenido */
+@media (max-width: 420px) {
+  .ia-fab-tx { display: none; }
+  .ia-fab { padding: 9px; }
+}
+
+/* ---------- Hoja ---------- */
+.ia-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ia-fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 14, 28, .48);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+.ia-wrap.ia-on .ia-fondo { opacity: 1; }
+
+.ia-hoja {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: var(--sh-2);
+  transform: translateY(14px);
+  opacity: 0;
+  transition: transform .24s cubic-bezier(.2, .8, .3, 1), opacity .18s ease;
+}
+.ia-wrap.ia-on .ia-hoja { transform: translateY(0); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ia-fondo, .ia-hoja { transition: none; }
+  .ia-hoja { transform: none; opacity: 1; }
+}
+
+.ia-h {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.ia-h-ic {
+  display: grid;
+  place-items: center;
+  width: 36px; height: 36px;
+  border-radius: 12px;
+  background: var(--brand-050);
+  color: var(--brand);
+  flex: 0 0 auto;
+}
+.ia-h-tx { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.ia-h-tx b { font-family: var(--font-display), var(--font-body); font-size: 15px; }
+.ia-h-tx small { color: var(--muted); font-size: 12px; }
+.ia-x {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ia-x:hover { background: var(--bg); color: var(--ink); }
+
+.ia-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- Mensajes ---------- */
+.ia-msg {
+  max-width: 92%;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  font-size: 14.5px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.ia-msg p { margin: 0 0 8px; }
+.ia-msg p:last-child { margin-bottom: 0; }
+.ia-msg ul { margin: 4px 0 8px; padding-left: 18px; }
+.ia-msg li { margin: 3px 0; }
+.ia-msg b { font-weight: 700; }
+
+.ia-bot {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.ia-yo {
+  align-self: flex-end;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  white-space: pre-wrap;
+}
+.ia-err {
+  align-self: stretch;
+  max-width: 100%;
+  background: transparent;
+  border: 1px dashed var(--danger);
+  color: var(--danger);
+  font-size: 13.5px;
+}
+.ia-muted { color: var(--muted); }
+
+.ia-meta {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ia-meta-tx { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ia-acts {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.ia-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ia-act:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+.ia-act:disabled { opacity: .55; cursor: default; }
+.ia-act svg { flex: 0 0 auto; }
+
+/* En pantallas angostas la fila de acciones se va abajo y respira */
+@media (max-width: 460px) {
+  .ia-meta { flex-wrap: wrap; }
+  .ia-acts { margin-left: 0; width: 100%; }
+}
+
+/* ---------- Cargando ---------- */
+.ia-cargando { display: flex; align-items: center; gap: 10px; }
+.ia-carga-tx { color: var(--muted); font-size: 13.5px; }
+.ia-pts { display: inline-flex; gap: 4px; }
+.ia-pts i {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: .35;
+  animation: ia-punto 1.05s ease-in-out infinite;
+}
+.ia-pts i:nth-child(2) { animation-delay: .16s; }
+.ia-pts i:nth-child(3) { animation-delay: .32s; }
+@keyframes ia-punto {
+  0%, 100% { opacity: .3; transform: translateY(0); }
+  50%      { opacity: 1;  transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ia-pts i { animation: none; opacity: .6; }
+}
+
+/* ---------- Pie / escribir ---------- */
+.ia-pie {
+  display: flex;
+  gap: 9px;
+  padding: 11px 12px calc(11px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+}
+.ia-in {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;   /* 15px o más: por debajo, iOS hace zoom al enfocar */
+}
+.ia-in:focus { outline: none; border-color: var(--brand); }
+.ia-in:disabled { opacity: .55; }
+.ia-in::placeholder { color: var(--muted); }
+
+.ia-send {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px; height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+}
+.ia-send:active { transform: scale(.94); }
+.ia-send:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+/* ---------- Aviso de la tarjeta de Configuración ---------- */
+.ia-cfg-aviso {
+  border-left: 3px solid var(--danger);
+  padding-left: 10px;
+}
+
+/* En PC la hoja se centra y despega del borde */
+@media (min-width: 720px) {
+  .ia-wrap { align-items: center; }
+  .ia-hoja {
+    max-height: 82vh;
+    border: 1px solid var(--line);
+    border-radius: var(--r-xl);
+  }
+  .ia-pie { border-radius: 0 0 var(--r-xl) var(--r-xl); }
+}
+
+/* ============================================================
+   AÑADIDO 27/07/2026 · botón movible, aviso de inicio y voz
+   ============================================================ */
+
+/* El FAB captura el gesto: sin esto, en móvil el navegador se queda con
+   el dedo para hacer scroll y el arrastre nunca llega a moverse. */
+.ia-fab { touch-action: none; }
+
+/* Mientras se arrastra: se levanta, se despinta el anillo y no hay
+   transición de posición (si no, el botón "persigue" al dedo). */
+.ia-fab-mov {
+  transition: none !important;
+  transform: scale(1.06);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .28);
+  cursor: grabbing;
+  opacity: .96;
+}
+.ia-fab-mov .ia-fab-ring { display: none; }
+.ia-fab-mov:hover { transform: scale(1.06); }
+
+/* Línea de ayuda al abrir la hoja, antes del primer análisis */
+.ia-hint {
+  margin: 6px 2px 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md, 12px);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Botón de voz: mismo tamaño que Copiar/PDF, y latiendo mientras suena */
+.ia-voz.on {
+  color: var(--brand);
+  border-color: var(--brand);
+  animation: ia-voz-late 1.5s ease-in-out infinite;
+}
+@keyframes ia-voz-late {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--brand-rgb), .30); }
+  60%      { box-shadow: 0 0 0 5px rgba(var(--brand-rgb), 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ia-voz.on { animation: none; }
+}
+
+/* Fila "Ver disponibles" + selector, en las dos tarjetas de Configuración */
+.ia-cfg-fila {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.ia-cfg-fila .input { flex: 1 1 180px; min-width: 0; }
