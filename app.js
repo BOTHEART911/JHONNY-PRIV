@@ -3946,7 +3946,7 @@ function agFormHtml(titulo, c) {
       ${campoFecha('ag-ffecha', 'Fecha', { minHoy: true })}
       ${field('Lugar (zona)', comboboxHtml('ag-flugar', 'Escribe para buscar…'))}
       ${field('Contacto (de la base o libre)', comboboxHtml('ag-fcont', 'Busca en la base o escríbelo…'))}
-      ${field('Teléfono', inputEl('ag-ftel', 'inputmode="numeric" maxlength="10" placeholder="10 dígitos (opcional)"'))}
+      ${field('Teléfono', inputEl('ag-ftel', 'inputmode="numeric" maxlength="10" placeholder="10 dígitos"'))}
       <div class="ev-hrow">
         ${field('Hora inicio', `<input class="input" id="ag-fini" type="time" />`)}
         ${field('Hora fin', `<input class="input" id="ag-ffin" type="time" />`)}
@@ -3996,7 +3996,9 @@ function agReadForm() {
 function agValidForm(b) {
   if (!b.titulo) { toast('Escribe el título de la reunión', 'err'); return false; }
   if (!b.fecha) { toast('Selecciona la fecha', 'err'); return false; }
-  if (b.telefono && b.telefono.length !== 10) { toast('Teléfono: 10 dígitos', 'err'); return false; }
+  if (!b.contacto) { toast('Escribe o elige el contacto', 'err'); return false; }
+  if (!b.telefono) { toast('Escribe el teléfono del contacto', 'err'); return false; }
+  if (b.telefono.length !== 10) { toast('Teléfono: 10 dígitos', 'err'); return false; }
   if (b.inicia && b.termina && b.termina <= b.inicia) { toast('La hora fin debe ser mayor que la de inicio', 'err'); return false; }
   return true;
 }
