@@ -3768,11 +3768,7 @@ function agPintaBloqueo() {
     $('#ag-block-ver').onclick = () => agPendientesModal();
     return;
   }
-  const hoyKey = dateToDDMM(new Date());
-  const hoyProg = AG_ESTRICTA ? AG_ALL.filter(r => r.fecha === hoyKey && agEstadoNormJs(r.estado) === 'PROGRAMADA').length : 0;
-  box.innerHTML = hoyProg
-    ? `<div class="ag-warn">${AG_SVG.alert}<p>Tienes <b>${hoyProg}</b> reunión(es) de hoy en PROGRAMADA. Si no las pasas a REALIZADA hoy, mañana la agenda queda bloqueada.</p></div>`
-    : '';
+  box.innerHTML = '';
 }
 
 function agPendItemHtml(c, tipo) {
