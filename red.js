@@ -37,7 +37,7 @@
    'priv.balanceVer priv.balancePdf priv.liderVer priv.liderReferidos priv.liderReferidosExcel priv.liderMeses priv.lideresExcel ' +
    'priv.lideresPdf pub.noticias priv.notificaciones priv.notifVer priv.iaPdf priv.anServicios priv.anIdeas priv.anIdeasPdf ' +
    'priv.anCortePdf priv.anResenas priv.anComercios priv.compromisos priv.compromisoVer priv.solicitudes priv.solicitudVer ' +
-   'priv.eventos priv.eventoVer priv.eventoMeta priv.eventoAsistentesExcel priv.eventoAsistentes priv.agenda priv.reunionVer ' +
+   'priv.analisis priv.eventos priv.eventoVer priv.eventoMeta priv.eventoAsistentesExcel priv.eventoAsistentes priv.agenda priv.reunionVer ' +
    'priv.reunionMeta priv.agendaMeta priv.dashboard priv.dashExcel priv.dashPdf priv.simulador priv.simuladorPdf ' +
    'voto.contadores voto.excel voto.informePdf center.tarjetas center.excel asis.eventos asis.evento qr.tarjeta ' +
    'qr.resolver qr.credencial pub.misDatos pub.comSocial pub.liderBalances pub.liderBalanceXlsx pub.vozEstado ' +

@@ -114,7 +114,96 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
     if (json.error === 'SESION_VENCIDA') { sesionVencida(); return new Promise(() => {}); }
     throw new Error(json.error || 'Error del servidor');
   }
+  /* 13/10/2026 · Fase 2: listado compacto (fmt=2) y comprimido (gz=1). Se
+     abre aquí, una vez, y la vista recibe los objetos de siempre. La forma
+     compacta se guarda aparte (no enumerable) para la caché de sesión. */
+  if (json.data && json.data.fmt === 2) {
+    const crudo = json.data;
+    const abierto = await RAP.abrir(crudo);
+    if (abierto && typeof abierto === 'object') { try { Object.defineProperty(abierto, '__rapCrudo', { value: crudo, enumerable: false }); } catch (e) {} }
+    return abierto;
+  }
   return json.data;
+}
+
+/* ============================================================
+   CARGA ÚNICA POR SESIÓN (13/10/2026 · Fase 2 · patrón BD Predial)
+   ------------------------------------------------------------
+   rapCargar(accion, params, pintar):
+     · Si la lista ya se trajo en esta sesión (memoria o sessionStorage) se
+       pinta AL INSTANTE desde ahí. Luego se mira /meta en Firebase (una sola
+       lectura de todos los canales): si ningún canal cambió después de la
+       hora con que se armó la lista, NO hay viaje. Si cambió, se trae de
+       fondo y en silencio, y solo se repinta si de verdad es distinta.
+     · Si no hay nada guardado, va al servidor en primer plano (esqueleto).
+   pintar(data, desdeCache) debe poder correr dos veces (caché y fresco)
+   sin perder filtros ni búsqueda: lee los controles del DOM.
+   ============================================================ */
+let _rapMetaProm = null, _rapMetaT = 0;
+function rapMeta() {
+  if (_rapMetaProm && Date.now() - _rapMetaT < 3000) return _rapMetaProm;   // una lectura de /meta sirve 3 s
+  _rapMetaT = Date.now();
+  _rapMetaProm = loadFirebase().then(fb => {
+    (fb.apps && fb.apps.length) ? fb.app() : fb.initializeApp(VOTO_FBCFG);
+    const leer = fb.database().ref('meta').once('value').then(s => {
+      const v = s.val() || {}, o = {};
+      Object.keys(v).forEach(k => { if (/_rev$/.test(k)) o[k.replace(/_rev$/, '')] = v[k]; });
+      return o;
+    });
+    return Promise.race([leer, new Promise((_, no) => setTimeout(() => no(new Error('meta tarde')), 4000))]);
+  });
+  _rapMetaProm.catch(() => { _rapMetaProm = null; });
+  return _rapMetaProm;
+}
+RAP.lectorMeta(rapMeta);
+
+/* Tras una escritura que ya se aplicó en pantalla: la caché de sesión toma la
+   lista nueva (aunque sea otro arreglo) y se borra la copia local. */
+function rapSync(clave, items) {
+  const c = RAP.tomar(clave);
+  if (c && c.data) c.data.items = items;
+  RAP.tocar(clave);
+}
+
+function rapFirma(d) { try { return JSON.stringify(d); } catch (e) { return String(Math.random()); } }
+
+/* Rutas que, con un CORE todavía sin desplegar, se arman con las de antes
+   (front y backend se suben en cualquier orden). */
+const RAP_TRAER = {
+  'priv.analisis': async (p, op) => {
+    try { return await api('priv.analisis', p, 'GET', null, op); }
+    catch (e) {
+      if (!/no reconocida/i.test(String(e && e.message))) throw e;
+      const uno = a => api(a, { caller: p.caller }, 'GET', null, op).catch(x => ({ ok: false, msg: String(x && x.message || x) }));
+      const [serv, ideas, com, res] = await Promise.all(['priv.anServicios', 'priv.anIdeas', 'priv.anComercios', 'priv.anResenas'].map(uno));
+      return { ok: true, serv, ideas, com, res };
+    }
+  }
+};
+function rapTraer(accion, p, op) { return RAP_TRAER[accion] ? RAP_TRAER[accion](p, op) : api(accion, p, 'GET', null, op); }
+
+async function rapCargar(accion, params, pintar, clave) {
+  RAP.setUsuario((getActive() || {}).documento || '');
+  const k = clave || accion;
+  const p = Object.assign({}, params, RAP.params());
+  const c = RAP.tomar(k) || await RAP.revivir(k);
+  if (c) {
+    pintar(c.data, true);
+    const v = await RAP.vencida(k);
+    if (v === false) return c.data;
+    try {
+      const d = await rapTraer(accion, p, SILENCIO);
+      if (!d || d.ok === false) return c.data;
+      const cambio = rapFirma(d) !== rapFirma(c.data);
+      RAP.guardar(k, d, d.__rapCrudo || d);
+      if (cambio) pintar(d, false);
+      return d;
+    } catch (e) { return c.data; }
+  }
+  const d = await rapTraer(accion, p, {});
+  if (d && d.ok !== false) RAP.guardar(k, d, d.__rapCrudo || d);
+  pintar(d, false);
+  return d;
 }
 /* Sesión firmada vencida o inválida: se borra el token y se pide el PIN otra
    vez (una sola vez, aunque lleguen varias respuestas juntas). */
@@ -139,7 +228,7 @@ const getActive = () => { const d = localStorage.getItem(ACT_KEY); return getSes
 RED.sesion(() => { const u = getActive(); return u ? { tk: u.tk || '', id: u.documento } : null; });
 const setActive = (doc) => localStorage.setItem(ACT_KEY, doc);
 function forgetSession(doc) { const list = getSessions().filter(x => x.documento !== doc); localStorage.setItem(SS_KEY, JSON.stringify(list)); if (localStorage.getItem(ACT_KEY) === doc) localStorage.removeItem(ACT_KEY); }
-function logout() { localStorage.removeItem(ACT_KEY); go('login'); }
+function logout() { localStorage.removeItem(ACT_KEY); try { RAP.olvidar(); } catch (e) {} go('login'); }
 
 /* ============================================================
    PWA: INSTALACIÓN  (patrón SEP-GROUP, idéntico a la pública)
@@ -737,7 +826,36 @@ function openModulo(id, user) {
   }
 }
 /* Ensancha el contenedor en vistas con grid/tarjetas (PC sin desborde) */
-function appWide(on) { document.body.classList.toggle('wide', !!on); }
+function appWide(on, xl) { document.body.classList.toggle('wide', !!on); document.body.classList.toggle('wide-xl', !!(on && xl)); }
+
+/* ============================================================
+   AVATAR (13/10/2026 · Fase 2) — foto o iniciales
+   ------------------------------------------------------------
+   La foto viene como ID de Drive (o URL) en el campo foto de la lista
+   compacta. Se pide en miniatura (=s96), perezosa, y si falla se queda la
+   inicial que ya está pintada debajo: nunca un hueco ni un ícono roto.
+   El color de las iniciales sale del nombre: la misma persona siempre igual.
+   ============================================================ */
+const AV_COLORES = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#059669', '#0891b2', '#4f46e5', '#b45309', '#be123c', '#0d9488'];
+function avIniciales(nombre) {
+  const p = String(nombre || '').trim().split(/\s+/).filter(w => w && !/^(de|del|la|las|los|y)$/i.test(w));
+  if (!p.length) return '?';
+  return ((p[0][0] || '') + (p.length > 1 ? (p[1][0] || '') : '')).toUpperCase();
+}
+function avColor(nombre) {
+  let h = 0; const s = String(nombre || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AV_COLORES[h % AV_COLORES.length];
+}
+function avFotoMini(foto) {
+  const u = bdFotoUrl(foto);
+  if (!u) return '';
+  return /^https:\/\/lh3\.googleusercontent\.com\/d\/[-\w]+$/.test(u) ? u + '=s96' : u;
+}
+function avatarHtml(nombre, foto, extra) {
+  const src = avFotoMini(foto);
+  return `<span class="av ${extra || ''}" style="--av:${avColor(nombre)}" aria-hidden="true"><b>${esc(avIniciales(nombre))}</b>${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+}
 
 /* ============================================================
    SELECTOR DE FECHA ESTILO iOS  (ruedas · portado de SEP-GROUP)
@@ -1156,6 +1274,7 @@ function bdCardHtml(c) {
     : (c.fechaRegistro ? `Creado ${fmtFechaLarga(c.fechaRegistro)}` : '');
   return `<article class="bd-card ${bdColor(c.municipio)} ${inact ? 'bd-inact' : ''}" data-doc="${esc(c.documento)}">
     <div class="bd-top">
+      ${avatarHtml(c.nombre, c.foto)}
       <div class="bd-id">
         <b class="bd-nombre">${c.esLider ? `<span class="bd-star" title="Líder">★</span> ` : ''}${esc(c.nombre || 'Sin nombre')}</b>
         <span class="bd-doc bd-doc-copy" data-copy="${esc(c.documento)}" title="Tocar para copiar">CC ${esc(c.documento)}</span>
@@ -1178,7 +1297,7 @@ function bdCardHtml(c) {
 
 async function viewBaseDatos(user) {
   BD_ME = user.documento;
-  appWide(true);
+  appWide(true, true);
   app.innerHTML = `${backbar('Base de Datos')}
     <div class="pad">
       <div class="bd-toolbar">
@@ -1218,14 +1337,22 @@ async function viewBaseDatos(user) {
   $('#bd-simulador').onclick = () => go('simulador');
   $('#bd-votacion').onclick = () => go('votacion');
 
+  /* 13/10/2026 · carga única por sesión: la segunda visita pinta al instante
+     desde la caché y solo vuelve al servidor si /meta dice que algo cambió. */
+  let primera = true;
+  BD_INT.clear();
   try {
-    const r = await api('priv.baseDatos', { caller: BD_ME });
-    if (!r.ok) { $('#bd-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-    BD_ALL = r.items || []; BD_REG_URL = r.registraduriaUrl || '';
-    BD_LIDERES = r.lideres || []; BD_COLS = r.columnas || [];
-    BD_INT.clear(); bdBuildIntChips(); bdBindLiderCombo();
-    bdApplyFilter();
-  } catch (e) { $('#bd-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+    await rapCargar('priv.baseDatos', { caller: BD_ME }, (r) => {
+      if (!$('#bd-body')) return;                         // ya salió de la vista
+      if (!r || r.ok === false) { if (primera) $('#bd-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
+      BD_ALL = r.items || []; BD_REG_URL = r.registraduriaUrl || '';
+      BD_LIDERES = r.lideres || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
+      bdBuildIntChips();
+      if (primera) bdBindLiderCombo();                    // el combo solo se arma una vez (no pierde lo elegido)
+      primera = false;
+      bdApplyFilter();
+    });
+  } catch (e) { if ($('#bd-body') && primera) $('#bd-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
 
   const q = $('#bd-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(bdApplyFilter, 160); };
@@ -1256,12 +1383,14 @@ async function vivoBd(rev) {
       if (ip >= 0) { BD_ALL.splice(ip, 1); cambio = true; }
     }
     const i = BD_ALL.findIndex(x => normDocJs(x.documento) === doc);
+    if (r.card) bdCompletarCard(r.card);
     if (r.card) {
       if (i < 0 || JSON.stringify(BD_ALL[i]) !== JSON.stringify(r.card)) {
         bdUpsertCard(r.card, true); cambio = true;
       }
     } else if (i >= 0) { BD_ALL.splice(i, 1); cambio = true; }
 
+    RAP.tocar('priv.baseDatos', 'bd', rev.ts);   // la caché de sesión ya tiene este cambio
     if (!cambio) return;                 // sonó por algo que no altera la tarjeta
     if (prev || !r.card) bdApplyFilter(); // se quitó una tarjeta: hay que repintar la lista
     bdBuildIntChips();
@@ -1270,9 +1399,11 @@ async function vivoBd(rev) {
   }
 
   /* No sabemos qué cambió: recarga completa (rara) */
-  const r = await api('priv.baseDatos', { caller: BD_ME }, 'GET', null, SILENCIO);
-  if (!r.ok || !vivoCambio(JSON.stringify(r.items))) return;
-  BD_ALL = r.items || []; BD_COLS = r.columnas || [];
+  const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME }, RAP.params()), 'GET', null, SILENCIO);
+  if (!r || r.ok === false) return;
+  RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
+  if (!vivoCambio(JSON.stringify(r.items))) return;
+  BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
   bdBuildIntChips(); bdApplyFilter(); vivoCerrarHoja(rev);
 }
 
@@ -1498,7 +1629,29 @@ function bdRenderMore() {
 }
 
 /* Actualiza (o inserta) una tarjeta en memoria + en el DOM */
+/* 13/10/2026 · la tarjeta suelta (editar, agregar, EN VIVO) trae el puesto
+   CRUDO; la etiqueta del Dashboard se saca aquí con el mismo catálogo y la
+   misma regla que pvEtiqueta_ (Puestos.gs) para que el tablero, que sale de
+   esta misma lista, no quede con un puesto viejo. */
+let BD_DASH = null;
+const pvNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9_]/g, '').trim();
+function bdPuestoEtiqueta(crudo) {
+  const p = String(crudo == null ? '' : crudo).trim();
+  const d = BD_DASH || {};
+  if (!p) return d.puestoSin || '(Sin puesto)';
+  const cat = d.puestos || [];
+  if (!cat.length) return p;
+  const n = pvNorm(p);
+  const hit = cat.find(x => pvNorm(x) === n);
+  return hit || d.puestoOtro || 'Otro municipio';
+}
+function bdCompletarCard(card) {
+  if (card && card.puesto === undefined && card.puestoCrudo !== undefined) card.puesto = bdPuestoEtiqueta(card.puestoCrudo);
+  return card;
+}
 function bdUpsertCard(card, _prepend) {
+  bdCompletarCard(card);
+  RAP.tocar('priv.baseDatos');   // la copia local ya no coincide: se rehace en la próxima visita
   const i = BD_ALL.findIndex(x => normDocJs(x.documento) === normDocJs(card.documento));
   const nuevo = i < 0;
   if (i >= 0) BD_ALL[i] = card; else BD_ALL.push(card);
@@ -1626,7 +1779,9 @@ async function bdEliminar(doc, card) {
 
 /* Quita una tarjeta de la lista en memoria y repinta (borrado en vivo). */
 function bdRemoveCard(doc) {
-  BD_ALL = BD_ALL.filter(x => normDocJs(x.documento) !== normDocJs(doc));
+  /* En sitio (no un arreglo nuevo): la caché de sesión apunta a este mismo */
+  for (let i = BD_ALL.length - 1; i >= 0; i--) if (normDocJs(BD_ALL[i].documento) === normDocJs(doc)) BD_ALL.splice(i, 1);
+  RAP.tocar('priv.baseDatos');
   const node = $(`#bd-grid .bd-card[data-doc="${cssq(doc)}"]`);
   if (node) node.remove();
   bdApplyFilter();
@@ -2019,9 +2174,10 @@ async function bdLoteRespaldo(antes) {
    (son cientos de filas cambiadas; traer tarjeta por tarjeta sería peor). */
 async function bdLoteRecargar() {
   try {
-    const r = await api('priv.baseDatos', { caller: BD_ME }, 'GET', null, { silent: true });
-    if (!r.ok) return;
-    BD_ALL = r.items || []; BD_COLS = r.columnas || [];
+    const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME }, RAP.params()), 'GET', null, { silent: true });
+    if (!r || r.ok === false) return;
+    RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
+    BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
     bdBuildIntChips(); bdApplyFilter();
   } catch (e) { /* la vista sigue usable; el refresco en vivo la pondrá al día */ }
 }
@@ -2313,6 +2469,7 @@ function ldCardHtml(c) {
   const tel = c.contacto ? String(c.contacto).replace(/^57/, '') : '';
   return `<article class="bd-card ld-card ${ldColor(c.referidos)}" data-cod="${esc(c.codigo)}">
     <div class="bd-top">
+      ${avatarHtml(c.nombre, c.foto)}
       <div class="bd-id">
         <b class="bd-nombre"><span class="ld-cod">#${esc(c.codigo)}</span> ${esc(c.nombre || 'Sin nombre')}</b>
         <span class="bd-doc">CC ${esc(c.documento || '—')}</span>
@@ -2430,7 +2587,7 @@ async function ldActivar(cod) {
 }
 
 async function viewLideres(user) {
-  LD_ME = user.documento; appWide(true);
+  LD_ME = user.documento; appWide(true, true);
   app.innerHTML = `${backbar('Líderes')}
     <div class="pad">
       <div class="bd-toolbar">
@@ -2455,14 +2612,18 @@ async function viewLideres(user) {
   $('#ld-add').onclick = () => ldAgregar();
   $('#ld-memoria').onclick = () => ldMemoria();
   $('#ld-exp').onclick = () => ldExportar();
+  let primera = true;
   try {
-    const r = await api('priv.lideres', ldAuth());
-    if (!r.ok) { $('#ld-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-    LD_ALL = r.items || []; LD_PLANT = r.plantillas || null; LD_COLS = r.columnas || [];
-    if (r.clases && r.clases.length) LD_CLASES = r.clases;
-    if (r.hayClase === false) toast('Falta la columna CLASIFICACION en la hoja LIDERES', 'err');
-    ldClfilRender(); ldApplyFilter();
-  } catch (e) { $('#ld-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+    await rapCargar('priv.lideres', ldAuth(), (r) => {
+      if (!$('#ld-body')) return;
+      if (!r || r.ok === false) { if (primera) $('#ld-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
+      LD_ALL = r.items || []; LD_PLANT = r.plantillas || null; LD_COLS = r.columnas || [];
+      if (r.clases && r.clases.length) LD_CLASES = r.clases;
+      if (r.hayClase === false && primera) toast('Falta la columna CLASIFICACION en la hoja LIDERES', 'err');
+      primera = false;
+      ldClfilRender(); ldApplyFilter();
+    });
+  } catch (e) { if ($('#ld-body') && primera) $('#ld-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
   const q = $('#ld-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(ldApplyFilter, 160); };
 
@@ -2471,8 +2632,10 @@ async function viewLideres(user) {
 
 /* ---- EN VIVO · Líderes ---- (la lista es chica: se recarga entera) */
 async function vivoLideres(rev) {
-  const r = await api('priv.lideres', ldAuth(), 'GET', null, SILENCIO);
-  if (!r.ok || !vivoCambio(JSON.stringify(r.items))) return;
+  const r = await api('priv.lideres', Object.assign(ldAuth(), RAP.params()), 'GET', null, SILENCIO);
+  if (!r || r.ok === false) return;
+  RAP.guardar('priv.lideres', r, r.__rapCrudo);
+  if (!vivoCambio(JSON.stringify(r.items))) return;
   LD_ALL = r.items || []; LD_PLANT = r.plantillas || LD_PLANT; LD_COLS = r.columnas || LD_COLS;
   if (r.clases && r.clases.length) LD_CLASES = r.clases;
   ldClfilRender(); ldApplyFilter(); vivoCerrarHoja(rev);
@@ -2617,6 +2780,9 @@ function ldExportar() {
 
 function ldFind(cod) { return LD_ALL.find(x => String(x.codigo) === String(cod)); }
 function ldUpsertCard(card, prepend) {
+  RAP.tocar('priv.lideres');   // la memoria queda parchada; la copia local se rehace en la próxima visita
+  const old = LD_ALL.find(x => String(x.codigo) === String(card.codigo));
+  if (old && card.foto === undefined) card.foto = old.foto;   // la tarjeta suelta no trae la foto
   const i = LD_ALL.findIndex(x => String(x.codigo) === String(card.codigo));
   if (i >= 0) LD_ALL[i] = card; else if (prepend) LD_ALL.unshift(card); else LD_ALL.push(card);
   const node = $(`#ld-grid .ld-card[data-cod="${cssq(card.codigo)}"]`);
@@ -2636,86 +2802,167 @@ function ldAccion(a, cod) {
   if (a === 'activar') return ldActivar(cod);   /* 01/09 */
 }
 
-/* ---- VER ---- */
-async function ldVer(cod) {
-  openSheet(`<div class="grip"></div><h2 class="h2">Líder</h2>${loadingBox('Cargando…')}`);
-  try {
-    const r = await api('priv.liderVer', { codigo: cod, ...ldAuth() });
-    if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); }
-    const c = r.lider;
-    const tel = c.telLocal || (c.contacto ? String(c.contacto).replace(/^57/, '') : '');
-    const rows = [
-      ['Código', '#' + c.codigo],
-      ['Nombre', c.nombre],
-      ['Documento', c.documento],
-      ['WhatsApp', tel || '—'],
-      ['Residencia', c.residencia || '—'],
-      ['Padrino', c.padrino || '—'],
-      ['Correo', c.correo || '—'],
-      ['Total referidos', Number(c.referidos || 0).toLocaleString('es-CO')],
-      ['Trabajo del mes', `${Number(c.pctTrabajo || 0)}% (${Number(c.trabajadas || 0).toLocaleString('es-CO')} con intención)`],
-      ['En base de datos', c.enPrincipal ? 'Sí' : 'No'],
-      ['Municipio', c.municipio || '—'],
-      ['Puesto', c.puesto || '—'],
-      ['Mesa', c.mesa || '—']
-    ].map(([k, v]) => `<div class="det-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
-    /* 31/08 · la ficha aprovecha el ancho en PC: a la izquierda el trabajo
-       (barra + desglose + gráfica del año) y a la derecha los datos. En
-       móvil se apilan igual que antes. */
-    openSheet(`<div class="grip"></div>
-      <div class="det-head"><h2 class="h2">#${esc(c.codigo)} · ${esc(c.nombre)}</h2><span class="ld-refs ${ldColor(c.referidos)}">${Number(c.referidos || 0).toLocaleString('es-CO')} ref.</span></div>
+/* ---- VER · FICHA DEL LÍDER (13/10/2026 · Fase 2) ----
+   Cabecera antes que datos: la ficha se pinta AL INSTANTE con lo que ya trae
+   la tarjeta (nombre, referidos, desglose, foto). Municipio, puesto y mesa
+   salen de la Base de Datos de la sesión si ya está cargada (cero viajes) y
+   si no, de priv.liderVer en segundo plano.
+   Las cifras son navegables: tocar un KPI o una intención abre los
+   referidos YA filtrados por eso. */
+const LD_INT_COLOR = {
+  'Firme con el voto': 'li-firme', 'No vota con nosotros': 'li-novota', 'No está seguro(a)': 'li-duda',
+  'No sabe votar': 'li-nosabe', 'No contactado': 'li-nocont'
+};
+function ldIntCls(label) { return LD_INT_COLOR[label] || 'li-otra'; }
+
+function ldVerAbierta(cod) { const r = $('#lf-root'); return !!(r && r.dataset.cod === String(cod)); }
+
+function ldDatosHtml(c, completo) {
+  const tel = c.telLocal || (c.contacto ? String(c.contacto).replace(/^57/, '') : '');
+  const falta = completo ? '—' : '…';
+  return [
+    ['Documento', c.documento || '—'],
+    ['WhatsApp', tel || '—'],
+    ['Residencia', c.residencia || '—'],
+    ['Padrino', c.padrino || '—'],
+    ['Correo', c.correo || '—'],
+    ['En base de datos', completo ? (c.enPrincipal ? 'Sí' : 'No') : falta],
+    ['Municipio', c.municipio || falta],
+    ['Puesto', c.puesto || falta],
+    ['Mesa', c.mesa || falta]
+  ].map(([k, v]) => `<div class="det-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+}
+
+function ldIntencionHtml(c) {
+  const ref = Number(c.referidos || 0);
+  if (!ref) return `<p class="small muted" style="margin:4px 0;">Este líder todavía no tiene referidos.</p>`;
+  const partes = (c.desglose || []).map(d => ({ label: d.label, n: Number(d.n || 0), pct: Number(d.pct || 0), cls: ldIntCls(d.label), k: d.label }));
+  const noFid = Number(c.noFidelizados || 0);
+  if (noFid) partes.push({ label: 'No fidelizados', n: noFid, pct: Number(c.pctNoFidelizados || 0), cls: 'li-nofid', k: '__sin' });
+  const barra = partes.filter(x => x.n > 0).map(x => `<i class="lf-seg ${x.cls}" style="flex:${x.n}" title="${esc(x.label)}: ${x.n.toLocaleString('es-CO')}"></i>`).join('');
+  const filas = partes.map(x => `<button type="button" class="lf-int" data-int="${esc(x.k)}">
+      <i class="lf-dot ${x.cls}"></i><span class="lf-int-l">${esc(x.label)}</span>
+      <span class="lf-int-n">${x.n.toLocaleString('es-CO')}</span><span class="lf-int-p">${x.pct}%</span>${I.chevR || ''}
+    </button>`).join('');
+  return `<div class="lf-bar">${barra}</div><div class="lf-ints">${filas}</div>
+    <p class="small muted ld-dg-nota">Sin intención registrada = no fidelizado (nadie lo ha contactado). “No contactado” sí es trabajo: lo llamaron y no responde.</p>`;
+}
+
+function ldVerHtml(c, completo) {
+  const ref = Number(c.referidos || 0), trab = Number(c.trabajadas || 0), nof = Number(c.noFidelizados || 0);
+  const firme = (c.desglose || []).find(d => d.label === 'Firme con el voto') || { n: 0, pct: 0 };
+  const kpi = (k, n, l, sub, cls) => `<button type="button" class="lf-kpi ${cls || ''}" data-int="${esc(k)}" ${ref ? '' : 'disabled'}>
+      <b>${Number(n || 0).toLocaleString('es-CO')}</b><span>${esc(l)}</span>${sub !== '' ? `<em>${esc(String(sub))}</em>` : ''}</button>`;
+  const tel = c.telLocal || (c.contacto ? String(c.contacto).replace(/^57/, '') : '');
+  return `<div class="grip"></div>
+    <div class="lf" id="lf-root" data-cod="${esc(c.codigo)}">
+      <header class="lf-head">
+        ${avatarHtml(c.nombre, c.foto, 'av-lg')}
+        <div class="lf-id">
+          <h2 class="h2">${esc(c.nombre || 'Sin nombre')}</h2>
+          <div class="lf-sub"><span class="ld-cod">#${esc(c.codigo)}</span> · CC ${esc(c.documento || '—')}${c.residencia ? ' · ' + esc(c.residencia) : ''}</div>
+          <div class="lf-chips">${(k => `<span class="lf-chip"><i>${k.emoji}</i> ${esc(k.etiqueta)}</span>`)(ldClaseInfo(c.clasificacion))}<span class="lf-chip ${c.activado ? 'lf-on' : ''}">${c.activado ? 'Activado' : 'No activado'}</span>${c.padrino ? `<span class="lf-chip">Padrino: ${esc(c.padrino)}</span>` : ''}</div>
+        </div>
+      </header>
+      <div class="lf-kpis">
+        ${kpi('', ref, 'Referidos', '', 'lf-k-ref')}
+        ${kpi('__trab', trab, 'Trabajados', (c.pctTrabajo || 0) + '%', 'lf-k-trab ' + ldTrabColor(Number(c.pctTrabajo || 0)))}
+        ${kpi('__sin', nof, 'No fidelizados', (c.pctNoFidelizados || 0) + '%', 'lf-k-nof')}
+        ${kpi('Firme con el voto', firme.n, 'Firmes con el voto', (firme.pct || 0) + '%', 'lf-k-firme')}
+      </div>
       <div class="ld-ver-cols">
         <div class="ld-ver-c1">
-          ${ldDesgloseHtml(c)}
+          <section class="lf-card"><div class="lf-card-h"><b>Intención de voto</b><span class="small muted">Toca para ver a quiénes</span></div>${ldIntencionHtml(c)}</section>
           <div id="ld-graf-box">${loadingBox('Cargando el año…')}</div>
         </div>
         <div class="ld-ver-c2">
-          <div class="det-list">${rows}</div>
+          <div class="det-list" id="lf-datos">${ldDatosHtml(c, completo)}</div>
           <div class="ld-ver-acts">
             <button class="btn btn-ghost" id="v-wa" ${c.contacto ? '' : 'disabled'}>${I.wa} WhatsApp</button>
             ${esMovilPriv() ? `<button class="btn btn-ghost" id="v-tel" ${tel ? '' : 'disabled'}>${I.phone} Llamar</button>` : ''}
           </div>
           <div class="stack" style="margin-top:12px;">
-            <button class="btn btn-quiet btn-block" id="v-refs">${I.users} Referidos (${Number(c.referidos || 0).toLocaleString('es-CO')})</button>
+            <button class="btn btn-quiet btn-block" id="v-refs">${I.users} Referidos (${ref.toLocaleString('es-CO')})</button>
             <button class="btn btn-quiet btn-block" id="ld-ahijados">Ahijados y delegación</button>
             <button class="btn btn-primary btn-block" id="v-edit">Editar</button>
             <button class="btn btn-quiet btn-block" id="v-acc">Acciones (mensajes)</button>
           </div>
         </div>
-      </div>`, 'sheet-xl');
-    ldGrafCargar(c.codigo, c);
-    $('#ld-ahijados').onclick = () => ldAhijados(c.codigo);
-    $('#v-refs').onclick = () => ldReferidos(c.codigo, c.nombre, c.referidos);
-    $('#v-wa').onclick = () => ldWaOpen(c.contacto, '');
-    if ($('#v-tel')) $('#v-tel').onclick = () => { location.href = 'tel:+' + String(c.contacto || '').replace(/\D/g, ''); };
-    $('#v-edit').onclick = () => { closeLayer(); ldEditar(cod); };
-    $('#v-acc').onclick = () => { closeLayer(); ldAcciones(cod); };
-  } catch (e) { closeLayer(); toast('Error de conexión', 'err'); }
+      </div>
+    </div>`;
 }
 
-/* ---- REFERIDOS del líder (B2 · 18/07) ----
-   Tabla estilo asistencia de eventos (reusa .asis-*), filtro LOCAL (no en
-   vivo), buena en móvil (data-l), y Excel con selección de columnas igual
-   que la Base de Datos. Los datos se piden UNA vez (priv.liderReferidos) y
-   se filtran/paginan en el cliente; el Excel exporta lo filtrado. */
+function ldVerPintar(c, completo) {
+  const cod = c.codigo;
+  if (ldVerAbierta(cod)) {                                   // ya está abierta: solo se completan los datos
+    const d = $('#lf-datos'); if (d) d.innerHTML = ldDatosHtml(c, completo);
+    return;
+  }
+  openSheet(ldVerHtml(c, completo), 'sheet-xl');
+  ldGrafCargar(cod, c);
+  $('#ld-ahijados').onclick = () => ldAhijados(cod);
+  $('#v-refs').onclick = () => ldReferidos(cod, c.nombre, c.referidos);
+  $$('#lf-root [data-int]').forEach(b => b.onclick = () => ldReferidos(cod, c.nombre, c.referidos, { int: b.dataset.int }));
+  $('#v-wa').onclick = () => ldWaOpen(c.contacto, '');
+  if ($('#v-tel')) $('#v-tel').onclick = () => { location.href = 'tel:+' + String(c.contacto || '').replace(/\D/g, ''); };
+  $('#v-edit').onclick = () => { closeLayer(); ldEditar(cod); };
+  $('#v-acc').onclick = () => { closeLayer(); ldAcciones(cod); };
+}
+
+async function ldVer(cod) {
+  const base = ldFind(cod);
+  if (base) ldVerPintar(Object.assign({}, base), false);
+  else openSheet(`<div class="grip"></div><h2 class="h2">Líder</h2>${loadingBox('Cargando…')}`);
+  /* Complemento sin viaje: la Base de Datos de la sesión ya sabe dónde vota */
+  const bd = RAP.tomar('priv.baseDatos');
+  if (base && bd && base.documento) {
+    const d = normDocJs(base.documento);
+    const pr = (bd.data.items || []).find(x => normDocJs(x.documento) === d);
+    return ldVerPintar(Object.assign({}, base, {
+      enPrincipal: !!pr, municipio: pr ? String(pr.municipio || '') : '', puesto: pr ? String(pr.puestoCrudo || '') : '',
+      mesa: pr ? String(pr.mesa || '') : '', telLocal: base.contacto ? String(base.contacto).replace(/^57/, '') : ''
+    }), true);
+  }
+  try {
+    const r = await api('priv.liderVer', { codigo: cod, ...ldAuth() }, 'GET', null, base ? SILENCIO : {});
+    if (!r.ok) { if (!base) { closeLayer(); toast(r.msg || 'No se pudo cargar', 'err'); } return; }
+    if (base && !ldVerAbierta(cod)) return;                   // la cerraron mientras tanto
+    const c = Object.assign({}, base || {}, r.lider);
+    if (base && base.foto && !c.foto) c.foto = base.foto;
+    ldVerPintar(c, true);
+  } catch (e) { if (!base) { closeLayer(); toast('Error de conexión', 'err'); } }
+}
+
+/* ---- REFERIDOS del líder (13/10/2026 · tarjetas) ----
+   Antes era una tabla; ahora son tarjetas con avatar, municipio, puesto/mesa
+   e intención, en columnas que aprovechan el ancho en PC. Se pide UNA vez por
+   sesión (priv.liderReferidos, con su sello rv) y todo lo demás —buscar,
+   municipio, intención, seleccionar y reasignar, Excel— es local. */
 let RF_ALL = [], RF_FILT = [], RF_SHOWN = 0, RF_COLS = [], RF_COD = '', RF_NOMBRE = '';
 let RF_SEL = null;   // 22/07: null = modo normal · Set(documentos) = modo selección
 let RF_MUN = '';     // 31/08: pastilla de municipio activa ('' = todos)
-const RF_BATCH = 50;
-const rfNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+let RF_INT = '';     // 13/10: intención activa ('' todas · '__trab' con intención · '__sin' sin intención · etiqueta)
+const RF_BATCH = 60;
+const rfNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-async function ldReferidos(cod, nombre, refCount) {
+async function ldReferidos(cod, nombre, refCount, op) {
   RF_COD = cod; RF_NOMBRE = nombre || ''; RF_SEL = null; RF_MUN = ''; RF_MUNS_TODOS = false;
-  openSheet(`<div class="grip"></div>
+  RF_INT = (op && op.int) || '';
+  const cache = RAP.tomar('priv.liderReferidos:' + cod);
+  if (!cache) openSheet(`<div class="grip"></div>
     <div class="det-head"><h2 class="h2">Referidos · ${esc(nombre || ('#' + cod))}</h2>
       <span class="ld-refs">${Number(refCount || 0).toLocaleString('es-CO')} ref.</span></div>
     ${loadingBox('Cargando referidos…')}`, 'sheet-xl');
-  let r;
-  try { r = await api('priv.liderReferidos', { codigo: cod, ...ldAuth() }); }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
-  if (!r || !r.ok) { closeLayer(); return toast((r && r.msg) || 'No se pudo cargar', 'err'); }
-  RF_ALL = r.items || []; RF_COLS = r.columnas || [];
-  rfRender();
+  let pintado = false;
+  try {
+    await rapCargar('priv.liderReferidos', { codigo: cod, ...ldAuth() }, (r) => {
+      if (String(RF_COD) !== String(cod)) return;              // ya abrió otro líder
+      if (!r || r.ok === false) { if (!pintado) { closeLayer(); toast((r && r.msg) || 'No se pudo cargar', 'err'); } return; }
+      RF_ALL = r.items || []; RF_COLS = r.columnas || [];
+      if (!pintado) rfRender(); else if ($('#rf-body')) rfApply();
+      pintado = true;
+    }, 'priv.liderReferidos:' + cod);
+  } catch (e) { if (!pintado) { closeLayer(); toast('Error de conexión', 'err'); } }
 }
 
 /* Pinta la hoja de referidos desde memoria (sin volver a pedir datos) */
@@ -2728,6 +2975,7 @@ function rfRender() {
         <div class="bd-search"><input class="input" id="rf-q" placeholder="Buscar por documento, nombre, contacto, residencia, municipio, puesto o mesa…" autocomplete="off" /></div>
         <button class="btn btn-ghost asis-xls" id="rf-xls" ${RF_ALL.length ? '' : 'hidden'}>${I.download} Excel</button>
       </div>
+      <div class="rf-muns rf-ints" id="rf-ints"></div>
       <div class="rf-muns" id="rf-muns"></div>
       <div class="rf-acts" id="rf-acts" ${RF_ALL.length ? '' : 'hidden'}>${rfActsHtml()}</div>
       <div id="rf-body"></div>
@@ -2779,24 +3027,27 @@ function rfPaintActs() {
 
 /* Sincroniza las casillas ya pintadas con el Set (tras "Todos"/"Ninguno") */
 function rfPaintChecks() {
-  const tb = $('#rf-tb'); if (!tb || !RF_SEL) return;
-  tb.querySelectorAll('tr[data-doc]').forEach(tr => {
-    const on = RF_SEL.has(String(tr.dataset.doc));
-    tr.classList.toggle('rf-on', on);
-    const ck = tr.querySelector('.rf-ck'); if (ck) ck.checked = on;
+  const g = $('#rf-grid'); if (!g || !RF_SEL) return;
+  g.querySelectorAll('.rf-card[data-doc]').forEach(el => {
+    const on = RF_SEL.has(String(el.dataset.doc));
+    el.classList.toggle('rf-on', on);
+    const ck = el.querySelector('.rf-ck'); if (ck) ck.checked = on;
   });
 }
 
-/* Click en una fila (delegado en el tbody): alterna su selección */
+/* Toque en una tarjeta (delegado en la grilla): en modo selección la alterna;
+   el botón de WhatsApp abre el chat sin seleccionar. */
 function rfRowClick(ev) {
+  const wa = ev.target && ev.target.closest ? ev.target.closest('[data-wa]') : null;
+  if (wa) { ev.stopPropagation(); return ldWaOpen(wa.dataset.wa, ''); }
   if (!RF_SEL) return;
-  const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-doc]') : null;
-  if (!tr) return;
-  const d = String(tr.dataset.doc || ''); if (!d) return;
+  const el = ev.target && ev.target.closest ? ev.target.closest('.rf-card[data-doc]') : null;
+  if (!el) return;
+  const d = String(el.dataset.doc || ''); if (!d) return;
   if (RF_SEL.has(d)) RF_SEL.delete(d); else RF_SEL.add(d);
   const on = RF_SEL.has(d);
-  tr.classList.toggle('rf-on', on);
-  const ck = tr.querySelector('.rf-ck'); if (ck) ck.checked = on;
+  el.classList.toggle('rf-on', on);
+  const ck = el.querySelector('.rf-ck'); if (ck) ck.checked = on;
   rfPaintActs();
 }
 
@@ -2830,6 +3081,7 @@ function rfReasignar() {
       if (!r.ok) return toast(r.msg || 'No se pudo reasignar', 'err');
       const movidos = new Set(docs);
       RF_ALL = RF_ALL.filter(x => !movidos.has(String(x.documento)));
+      RAP.olvidar('priv.liderReferidos:' + RF_COD); RAP.olvidar('priv.liderReferidos:' + code);
       const n = Number(r.n || docs.length);
       const src = ldFind(RF_COD); if (src) src.referidos = Math.max(0, Number(src.referidos || 0) - n);
       const dst = ldFind(code);   if (dst) dst.referidos = Number(dst.referidos || 0) + n;
@@ -2886,12 +3138,51 @@ function rfPaintMuns() {
   });
 }
 
+/* ---- PASTILLAS DE INTENCIÓN (13/10/2026) ----
+   Mismas etiquetas y colores de la ficha. Se llega aquí ya filtrado cuando
+   se toca un KPI o una intención en la ficha del líder. */
+function rfIntClave(v) { return rfNorm(String(v == null ? '' : v).trim()); }
+function rfInts() {
+  const map = new Map(); let sin = 0;
+  RF_ALL.forEach(x => {
+    const v = String(x.intencion || '').trim();
+    if (!v) { sin++; return; }
+    const k = rfIntClave(v);
+    if (!map.has(k)) map.set(k, { k: v, n: 0 });
+    map.get(k).n++;
+  });
+  const orden = LD_INT_ORDEN.map(rfIntClave);
+  const lista = Array.from(map.values()).sort((a, b) => {
+    const ia = orden.indexOf(rfIntClave(a.k)), ib = orden.indexOf(rfIntClave(b.k));
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || b.n - a.n;
+  });
+  return { lista, sin };
+}
+function rfIntPasa(x) {
+  if (!RF_INT) return true;
+  const v = String(x.intencion || '').trim();
+  if (RF_INT === '__sin') return !v;
+  if (RF_INT === '__trab') return !!v;
+  return rfIntClave(v) === rfIntClave(RF_INT);
+}
+function rfPaintInts() {
+  const caja = $('#rf-ints'); if (!caja) return;
+  if (!RF_ALL.length) { caja.innerHTML = ''; return; }
+  const { lista, sin } = rfInts();
+  const trab = RF_ALL.length - sin;
+  const b = (k, txt, n, cls) => `<button type="button" class="rf-mun rf-int-p ${cls || ''} ${RF_INT === k ? 'on' : ''}" data-int="${esc(k)}">${esc(txt)} <b>${n.toLocaleString('es-CO')}</b></button>`;
+  caja.innerHTML = b('', 'Todas', RF_ALL.length, 'rf-mun-all') + b('__trab', 'Trabajados', trab, 'li-trab') +
+    lista.map(x => b(x.k, x.k, x.n, ldIntCls(x.k))).join('') + (sin ? b('__sin', 'No fidelizados', sin, 'li-nofid') : '');
+  caja.querySelectorAll('[data-int]').forEach(el => el.onclick = () => { const v = el.dataset.int; RF_INT = (RF_INT === v ? '' : v); rfApply(); });
+}
+
 function rfApply() {
   const qEl = $('#rf-q'); const q = qEl ? rfNorm(qEl.value).trim() : '';
-  const base = RF_MUN ? RF_ALL.filter(x => rfMunClave(x.municipio) === RF_MUN) : RF_ALL;
+  const base = RF_ALL.filter(x => (!RF_MUN || rfMunClave(x.municipio) === RF_MUN) && rfIntPasa(x));
   RF_FILT = !q ? base.slice() : base.filter(x =>
-    rfNorm([x.documento, x.nombre, x.contacto, x.residencia, x.municipio, x.puesto, x.mesa].join(' ')).includes(q));
+    rfNorm([x.documento, x.nombre, x.contacto, x.residencia, x.municipio, x.puesto, x.mesa, x.intencion].join(' ')).includes(q));
   RF_SHOWN = 0;
+  rfPaintInts();
   rfPaintMuns();
   rfPaintActs();
   const body = $('#rf-body'); if (!body) return;
@@ -2899,27 +3190,39 @@ function rfApply() {
     body.innerHTML = `<p class="muted center small" style="padding:14px 0;">${RF_ALL.length ? 'Ningún referido coincide con el filtro.' : 'Este líder no tiene referidos todavía.'}</p>`;
     return;
   }
-  body.innerHTML = `<div class="asis-wrap ${RF_SEL ? 'rf-picking' : ''}"><table class="asis-t">
-      <thead><tr><th class="asis-i">#</th><th>Documento</th><th>Nombre</th><th>Contacto</th><th>Residencia</th><th>Municipio</th><th>Puesto</th><th>Mesa</th></tr></thead>
-      <tbody id="rf-tb"></tbody></table></div>
+  body.innerHTML = `<p class="small muted rf-cuenta">${RF_FILT.length.toLocaleString('es-CO')} de ${RF_ALL.length.toLocaleString('es-CO')} referido(s)</p>
+    <div class="rf-grid ${RF_SEL ? 'rf-picking' : ''}" id="rf-grid"></div>
     <div class="center" id="rf-more" style="margin-top:10px;"></div>`;
-  const tb = $('#rf-tb'); if (tb) tb.onclick = rfRowClick;
+  const g = $('#rf-grid'); if (g) g.onclick = rfRowClick;
   rfMore();
 }
 
+function rfCardHtml(x) {
+  const on = RF_SEL && RF_SEL.has(String(x.documento));
+  const tel = x.contacto ? String(x.contacto).replace(/^57/, '') : '';
+  const int = String(x.intencion || '').trim();
+  const mun = x.municipio || '';
+  const lugar = [x.puesto, x.mesa ? 'Mesa ' + x.mesa : ''].filter(Boolean).join(' · ');
+  return `<article class="rf-card ${on ? 'rf-on' : ''}" data-doc="${esc(x.documento || '')}">
+      ${RF_SEL ? `<input type="checkbox" class="rf-ck" ${on ? 'checked' : ''} aria-label="Seleccionar" />` : ''}
+      ${avatarHtml(x.nombre, x.foto)}
+      <div class="rf-c-main">
+        <b class="rf-c-nom">${esc(x.nombre || '—')}</b>
+        <span class="rf-c-sub">CC ${esc(x.documento || '—')}${tel ? ' · ' + esc(tel) : ''}</span>
+        <span class="rf-c-meta">${mun ? `<span class="bd-mun ${bdColor(mun)}">${esc(mun)}</span>` : ''}${lugar ? `<span class="rf-c-lugar">${esc(lugar)}</span>` : ''}</span>
+        ${x.residencia ? `<span class="rf-c-res">${esc(x.residencia)}</span>` : ''}
+      </div>
+      <div class="rf-c-side">
+        <span class="rf-int ${int ? ldIntCls(int) : 'li-nofid'}">${esc(int || 'Sin intención')}</span>
+        ${tel && !RF_SEL ? `<button type="button" class="rf-wa" data-wa="${esc(x.contacto)}" title="WhatsApp">${I.wa}</button>` : ''}
+      </div>
+    </article>`;
+}
+
 function rfMore() {
-  const tb = $('#rf-tb'); if (!tb) return;
+  const g = $('#rf-grid'); if (!g) return;
   const next = RF_FILT.slice(RF_SHOWN, RF_SHOWN + RF_BATCH);
-  tb.insertAdjacentHTML('beforeend', next.map((x, i) => `<tr data-doc="${esc(x.documento || '')}" class="${RF_SEL && RF_SEL.has(String(x.documento)) ? 'rf-on' : ''}">
-      <td class="asis-i" data-l="#">${RF_SEL ? `<input type="checkbox" class="rf-ck" ${RF_SEL.has(String(x.documento)) ? 'checked' : ''} />` : (RF_SHOWN + i + 1).toLocaleString('es-CO')}</td>
-      <td data-l="Documento">${esc(x.documento || '—')}</td>
-      <td data-l="Nombre"><b>${esc(x.nombre || '—')}</b></td>
-      <td data-l="Contacto">${esc(x.contacto ? String(x.contacto).replace(/^57/, '') : '—')}</td>
-      <td data-l="Residencia">${esc(x.residencia || '—')}</td>
-      <td data-l="Municipio">${esc(x.municipio || '—')}</td>
-      <td data-l="Puesto">${esc(x.puesto || '—')}</td>
-      <td data-l="Mesa">${esc(x.mesa || '—')}</td>
-    </tr>`).join(''));
+  g.insertAdjacentHTML('beforeend', next.map(rfCardHtml).join(''));
   RF_SHOWN += next.length;
   const more = $('#rf-more'); if (!more) return;
   if (RF_SHOWN < RF_FILT.length) {
@@ -3407,8 +3710,34 @@ let DASH_RESI_ALL = null;
 let DASH_PUESTOS = [], DASH_P_OTRO = 'Otro municipio';
 const DASH_TOPN_OPTS = [10, 15, 25, 50, 0]; // 0 = Todas
 
+/* 13/10/2026 · Fase 2: el Dashboard sale de la MISMA lista de PRINCIPAL que
+   la Base de Datos (priv.baseDatos fmt=2 ya trae puesto, mesa y el catálogo).
+   Venir de Base de Datos = cero viajes; entrar directo = un viaje que de paso
+   deja lista la Base de Datos. Las filas se arman igual que
+   apiPrivDashboardArmar_ (Dashboard.gs): activos, residencia y municipio con
+   su "(Sin …)", y el municipio de la campaña comparado como en el CORE. */
+function dashDesdeBd(r) {
+  const d = r.dash || {};
+  BD_DASH = d;
+  const mio = String(MV.municipio || '').trim().toUpperCase();
+  DASH_ROWS = (r.items || []).filter(x => String(x.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO').map(x => ({
+    documento: String(x.documento == null ? '' : x.documento).trim(),
+    nombre: x.nombre || '',
+    residencia: String(x.residencia || '').trim() || '(Sin residencia)',
+    municipio: String(x.municipio || '').trim() || '(Sin municipio)',
+    puesto: x.puesto !== undefined ? x.puesto : bdPuestoEtiqueta(x.puestoCrudo),
+    puestoCrudo: String(x.puestoCrudo || '').trim(),
+    mesa: String(x.mesa == null ? '' : x.mesa).trim(),
+    intencion: String(x.intencion || '').trim(),
+    esFlandes: !!mio && String(x.municipio == null ? '' : x.municipio).trim().toUpperCase() === mio,
+    esLider: !!x.esLider
+  }));
+  DASH_COLS = d.columnas || DASH_COLS;
+  DASH_PUESTOS = d.puestos || DASH_PUESTOS; DASH_P_OTRO = d.puestoOtro || DASH_P_OTRO;
+}
+
 async function viewDashboard(user) {
-  DASH_ME = user.documento; appWide(true);
+  DASH_ME = user.documento; appWide(true, true);
   app.innerHTML = `${backbar('Dashboard')}
     <div class="pad">
       <div id="dash-controls"></div>
@@ -3416,14 +3745,19 @@ async function viewDashboard(user) {
     </div>`;
   app.hidden = false; hideSplash();
   $('#backbtn').onclick = () => go('bd');
+  DASH_GROUP = 'residencia'; DASH_TOPN = 15; DASH_Q = ''; DASH_SOLO_PUESTO = false; DASH_SIN_REG = false; DASH_INT.clear();
+  let primera = true;
   try {
-    const r = await api('priv.dashboard', { caller: DASH_ME });
-    if (!r.ok) { $('#dash-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-    DASH_ROWS = r.rows || []; DASH_COLS = r.columnas || [];
-    DASH_PUESTOS = r.puestos || []; DASH_P_OTRO = r.puestoOtro || DASH_P_OTRO;
-    DASH_GROUP = 'residencia'; DASH_TOPN = 15; DASH_Q = ''; DASH_SOLO_PUESTO = false; DASH_SIN_REG = false; DASH_INT.clear();
-    dashRenderControls(); dashRender();
-  } catch (e) { $('#dash-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+    await rapCargar('priv.baseDatos', { caller: DASH_ME }, (r) => {
+      if (!$('#dash-body')) return;
+      if (!r || r.ok === false) { if (primera) $('#dash-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
+      if (!r.dash) return dashViejo(primera);   // CORE todavía sin la Fase 2: se usa la ruta de antes
+      dashDesdeBd(r);
+      if (primera) dashRenderControls();
+      primera = false;
+      dashRender();
+    });
+  } catch (e) { if ($('#dash-body') && primera) $('#dash-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
 
   vivoBind('bd', DASH_ME, vivoDashboard);   // EN VIVO: el Dashboard sale de PRINCIPAL → canal 'bd'
 }
@@ -3432,12 +3766,40 @@ async function viewDashboard(user) {
    Cambia una persona en otro equipo y las gráficas se recalculan solas. Se
    conservan los controles tal como los dejó el usuario (agrupación, Top N,
    búsqueda, filtros): solo se cambian los datos por debajo. */
+/* Respaldo mientras el CORE desplegado no traiga la lista compacta */
+async function dashViejo(primera) {
+  try {
+    const r = await api('priv.dashboard', { caller: DASH_ME }, 'GET', null, primera ? {} : SILENCIO);
+    if (!r || !r.ok || !$('#dash-body')) return;
+    DASH_ROWS = r.rows || []; DASH_COLS = r.columnas || [];
+    DASH_PUESTOS = r.puestos || []; DASH_P_OTRO = r.puestoOtro || DASH_P_OTRO;
+    dashRenderControls(); dashRender();
+  } catch (e) { if ($('#dash-body')) $('#dash-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+}
+
 async function vivoDashboard(rev) {
-  const r = await api('priv.dashboard', { caller: DASH_ME }, 'GET', null, SILENCIO);
-  if (!r.ok || !vivoCambio(JSON.stringify(r.rows))) return;
-  DASH_ROWS = r.rows || []; DASH_COLS = r.columnas || DASH_COLS;
-  DASH_PUESTOS = r.puestos || DASH_PUESTOS; DASH_P_OTRO = r.puestoOtro || DASH_P_OTRO;
-  dashRender(); vivoCerrarHoja(rev);
+  /* Si la señal trae la persona, basta su tarjeta (se parcha en la lista de
+     sesión y el tablero se recalcula desde ahí); si no, la lista entera. */
+  const c = RAP.tomar('priv.baseDatos');
+  const doc = rev && rev.doc ? normDocJs(rev.doc) : '';
+  if (c && doc) {
+    const r = await api('priv.bdCard', { caller: DASH_ME, documento: doc }, 'GET', null, SILENCIO);
+    const items = c.data.items || (c.data.items = []);
+    const prev = rev.prev ? normDocJs(rev.prev) : '';
+    for (let i = items.length - 1; i >= 0; i--) {
+      const d = normDocJs(items[i].documento);
+      if ((prev && d === prev) || d === doc) items.splice(i, 1);
+    }
+    if (r && r.card) items.push(bdCompletarCard(r.card));
+    RAP.tocar('priv.baseDatos', 'bd', rev.ts);
+    dashDesdeBd(c.data); dashRender(); vivoCerrarHoja(rev);
+    return;
+  }
+  const r = await api('priv.baseDatos', Object.assign({ caller: DASH_ME }, RAP.params()), 'GET', null, SILENCIO);
+  if (!r || r.ok === false) return;
+  RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
+  if (!vivoCambio(JSON.stringify(r.items))) return;
+  dashDesdeBd(r); dashRender(); vivoCerrarHoja(rev);
 }
 
 function dashIntValues() {
@@ -3726,8 +4088,14 @@ async function viewVotacion(user) {
 
   await votoLoad(false);
   elecCronoBind('voto-crono', 'horas');
-  VOTO_poll = setInterval(() => votoLoad(false), 7000); // refresco en vivo desde la hoja
-  votoInitFirebase();                                    // + señal instantánea si Firebase está disponible
+  /* 13/10/2026 · Fase 2: /meta ya es legible, así que la señal de Firebase
+     manda y NO hay reloj de 7 s. El sondeo queda solo de respaldo: si Firebase
+     no carga, niega la lectura o no entrega su primer valor en 6 s. */
+  votoInitFirebase();
+}
+function votoRespaldo() {
+  if (VOTO_poll || !$('#voto-counters')) return;
+  VOTO_poll = setInterval(() => { if (!document.hidden) votoLoad(false); }, 7000);
 }
 
 async function votoLoad(manual) {
@@ -3747,15 +4115,21 @@ async function votoLoad(manual) {
    escribe: voto.registrar toca el timbre en el router (Vivo.gs). El sondeo de
    7 s se mantiene tal cual como respaldo. */
 function votoInitFirebase() {
+  let llego = false;
+  const t0 = setTimeout(() => { if (!llego) votoRespaldo(); }, 6000);
   loadFirebase().then(fb => {
+    if (!$('#voto-counters')) return;                    // ya salió de la vista
     VOTO_fb = fb;
     (fb.apps && fb.apps.length) ? fb.app() : fb.initializeApp(VOTO_FBCFG);
     VOTO_ref = fb.database().ref('meta/votacion_rev');
+    let primero = true;
     VOTO_onVal = VOTO_ref.on('value', () => {
+      llego = true; clearTimeout(t0);
+      if (primero) { primero = false; return; }          // el primer disparo es el valor actual: ya se cargó
       if (VOTO_reloadT) return;
       VOTO_reloadT = setTimeout(() => { VOTO_reloadT = null; votoLoad(false); }, 600);
-    }, () => {});
-  }).catch(() => {});
+    }, () => { clearTimeout(t0); votoRespaldo(); });
+  }).catch(() => { clearTimeout(t0); votoRespaldo(); });
 }
 
 function votoRenderCounters() {
@@ -5226,6 +5600,7 @@ function cmAntigHtml(c) {
 function cmCardHtml(c) {
   return `<article class="bd-card cm-card ${cmEstadoClass(c.estado)}" data-id="${esc(c.id)}">
     <div class="bd-top">
+      ${avatarHtml(c.nombre, c.foto)}
       <div class="bd-id">
         <b class="bd-nombre">${esc(c.nombre || 'Sin nombre')}</b>
         <span class="bd-doc">${esc(c.residencia || '—')}</span>
@@ -5235,7 +5610,7 @@ function cmCardHtml(c) {
     <p class="cm-texto">${esc(c.compromiso || '—')}</p>
     ${cmSubHtml(c)}
     <div class="cm-foot">
-      <span class="cm-asig">${I.star} <b>${esc(c.asignado || 'Sin asignar')}</b></span>
+      <span class="cm-asig">${c.asignado ? avatarHtml(c.asignado, c.fotoAsg, 'av-xs') : I.star} <b>${esc(c.asignado || 'Sin asignar')}</b></span>
       ${cmAntigHtml(c)}
     </div>
     <div class="bd-acts cm-acts">
@@ -5285,7 +5660,7 @@ function cmResumenHtml() {
 }
 
 async function viewCompromisos(user) {
-  M5_ME = user.documento; appWide(true);
+  M5_ME = user.documento; appWide(true, true);
   app.innerHTML = `${backbar('Compromisos')}
     <div class="pad">
       <div id="cm-resumen"></div>
@@ -5305,24 +5680,30 @@ async function viewCompromisos(user) {
   $('#backbtn').onclick = () => go('home');
   $('#cm-add').onclick = () => cmAgregar();
   const irSol = $('#cm-ir-sol'); if (irSol) irSol.onclick = () => go('solicitudes');
-  try {
-    const r = await api('priv.compromisos', m5Auth());
-    if (!r.ok) { $('#cm-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-    CM_ALL = r.items || []; CM_CONT = r.contadores || {}; CM_PLANT = r.plantilla || '';
-    cmPintarResumen();
-    cmApplyFilter();
-  } catch (e) { $('#cm-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
   const q = $('#cm-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(cmApplyFilter, 160); };
   $$('#cm-chips .bd-chip').forEach(ch => ch.onclick = () => cmSetFilter(ch.dataset.f));
+  let primera = true;
+  try {
+    await rapCargar('priv.compromisos', m5Auth(), (r) => {
+      if (!$('#cm-body')) return;
+      if (!r || r.ok === false) { if (primera) $('#cm-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
+      CM_ALL = r.items || []; CM_CONT = r.contadores || {}; CM_PLANT = r.plantilla || '';
+      primera = false;
+      cmPintarResumen();
+      cmApplyFilter();
+    });
+  } catch (e) { if ($('#cm-body') && primera) $('#cm-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
 
   vivoBind('compromisos', M5_ME, vivoCompromisos);   // EN VIVO
 }
 
 /* ---- EN VIVO · Compromisos ---- */
 async function vivoCompromisos(rev) {
-  const r = await api('priv.compromisos', m5Auth(), 'GET', null, SILENCIO);
-  if (!r.ok || !vivoCambio(JSON.stringify(r.items))) return;
+  const r = await api('priv.compromisos', Object.assign(m5Auth(), RAP.params()), 'GET', null, SILENCIO);
+  if (!r || r.ok === false) return;
+  RAP.guardar('priv.compromisos', r, r.__rapCrudo || r);
+  if (!vivoCambio(JSON.stringify(r.items))) return;
   CM_ALL = r.items || []; CM_CONT = r.contadores || {}; CM_PLANT = r.plantilla || CM_PLANT;
   cmPintarResumen(); cmApplyFilter();
   /* Lote B1: si hay una bitácora abierta escribiéndose, NO se cierra la hoja
@@ -5375,12 +5756,14 @@ function cmRenderMore() {
 }
 function cmFind(id) { return CM_ALL.find(x => String(x.id) === String(id)); }
 function cmRecontar() {
+  rapSync('priv.compromisos', CM_ALL);   // toda escritura pasa por aquí
   CM_CONT = { ASIGNADO: 0, PENDIENTE: 0, CUMPLIDO: 0, DESCARTADO: 0 };
   CM_ALL.forEach(c => { CM_CONT[c.estado] = (CM_CONT[c.estado] || 0) + 1; });
   cmPintarResumen();
 }
 function cmUpsert(card) {
   const i = CM_ALL.findIndex(x => String(x.id) === String(card.id));
+  if (i >= 0 && card.foto === undefined) { card.foto = CM_ALL[i].foto; if (card.asignado === CM_ALL[i].asignado) card.fotoAsg = CM_ALL[i].fotoAsg; }
   if (i >= 0) CM_ALL[i] = card; else CM_ALL.push(card);
   CM_ALL.sort((a, b) => (a.ts || 0) - (b.ts || 0));   // más antiguo primero
   cmRecontar(); cmApplyFilter();
@@ -5654,6 +6037,7 @@ function slCardHtml(c) {
   const n = (c.traza || []).length;
   return `<article class="bd-card cm-card ${cmEstadoClass(c.estado)}" data-id="${esc(c.id)}">
     <div class="bd-top">
+      ${avatarHtml(c.asignado || '?', c.fotoAsg)}
       <div class="bd-id"><b class="bd-nombre">${esc(c.asignado || 'Sin asignar')}</b><span class="bd-doc">Asignado</span></div>
       <span class="cm-badge ${cmEstadoClass(c.estado)}">${esc(c.estado)}</span>
     </div>
@@ -5673,7 +6057,7 @@ function slCardHtml(c) {
 }
 
 async function viewSolicitudes(user) {
-  SL_ME = user.documento; appWide(true);
+  SL_ME = user.documento; appWide(true, true);
   app.innerHTML = `${backbar('Solicitudes')}
     <div class="pad">
       <div id="sl-resumen"></div>
@@ -5693,21 +6077,27 @@ async function viewSolicitudes(user) {
   $('#backbtn').onclick = () => go('compromisos');
   $('#sl-add').onclick = () => slAgregar();
   $('#sl-ir-com').onclick = () => go('compromisos');
-  try {
-    const r = await api('priv.solicitudes', m5Auth());
-    if (!r.ok) { $('#sl-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-    SL_ALL = r.items || []; SL_CONT = r.contadores || {};
-    slPintarResumen(); slApplyFilter();
-  } catch (e) { $('#sl-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
   const q = $('#sl-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(slApplyFilter, 160); };
   $$('#sl-chips .bd-chip').forEach(ch => ch.onclick = () => slSetFilter(ch.dataset.f));
+  let primera = true;
+  try {
+    await rapCargar('priv.solicitudes', m5Auth(), (r) => {
+      if (!$('#sl-body')) return;
+      if (!r || r.ok === false) { if (primera) $('#sl-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
+      SL_ALL = r.items || []; SL_CONT = r.contadores || {};
+      primera = false;
+      slPintarResumen(); slApplyFilter();
+    });
+  } catch (e) { if ($('#sl-body') && primera) $('#sl-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
   vivoBind('solicitudes', SL_ME, vivoSolicitudes);
 }
 
 async function vivoSolicitudes(rev) {
-  const r = await api('priv.solicitudes', m5Auth(), 'GET', null, SILENCIO);
-  if (!r.ok || !vivoCambio(JSON.stringify(r.items))) return;
+  const r = await api('priv.solicitudes', Object.assign(m5Auth(), RAP.params()), 'GET', null, SILENCIO);
+  if (!r || r.ok === false) return;
+  RAP.guardar('priv.solicitudes', r, r.__rapCrudo || r);
+  if (!vivoCambio(JSON.stringify(r.items))) return;
   SL_ALL = r.items || []; SL_CONT = r.contadores || {};
   slPintarResumen(); slApplyFilter();
   if (!document.querySelector('#sl-tz-in')) vivoCerrarHoja(rev);
@@ -5752,8 +6142,8 @@ function slRenderMore() {
   else more.innerHTML = '';
 }
 function slFind(id) { return SL_ALL.find(x => String(x.id) === String(id)); }
-function slRecontar() { SL_CONT = { ASIGNADO: 0, PENDIENTE: 0, CUMPLIDO: 0, DESCARTADO: 0 }; SL_ALL.forEach(c => { SL_CONT[c.estado] = (SL_CONT[c.estado] || 0) + 1; }); slPintarResumen(); }
-function slUpsert(card) { const i = SL_ALL.findIndex(x => String(x.id) === String(card.id)); if (i >= 0) SL_ALL[i] = card; else SL_ALL.push(card); SL_ALL.sort((a, b) => (a.ts || 0) - (b.ts || 0)); slRecontar(); slApplyFilter(); }
+function slRecontar() { rapSync('priv.solicitudes', SL_ALL); SL_CONT = { ASIGNADO: 0, PENDIENTE: 0, CUMPLIDO: 0, DESCARTADO: 0 }; SL_ALL.forEach(c => { SL_CONT[c.estado] = (SL_CONT[c.estado] || 0) + 1; }); slPintarResumen(); }
+function slUpsert(card) { const i = SL_ALL.findIndex(x => String(x.id) === String(card.id)); if (i >= 0 && card.fotoAsg === undefined && card.asignado === SL_ALL[i].asignado) card.fotoAsg = SL_ALL[i].fotoAsg; if (i >= 0) SL_ALL[i] = card; else SL_ALL.push(card); SL_ALL.sort((a, b) => (a.ts || 0) - (b.ts || 0)); slRecontar(); slApplyFilter(); }
 function slAccion(a, id) {
   if (a === 'estado') return slEstadoPicker(id);
   if (a === 'detalles') return slDetalle(id);
@@ -6413,15 +6803,64 @@ const AN_SELECCIONABLES = new Set(['A TENER EN CUENTA', 'ANOTADA']);
 function anLabelIdea(k) { const h = AN_IDEA_EST.find(e => e.k === k); return h ? h.label : k; }
 
 /* ============================================================
-   SHELL DE LA VISTA
+   SHELL DE LA VISTA (13/10/2026 · Fase 2 · rediseño)
+   ------------------------------------------------------------
+   · UN viaje: priv.analisis trae Servicios + Ideas + Comercios + Reseñas
+     juntos (comprimido, < 40 KB). Cambiar de pestaña ya no va al servidor,
+     y la segunda visita de la sesión pinta al instante desde la caché.
+   · Pestaña nueva RESUMEN (la de entrada): las tres áreas lado a lado con
+     sus cifras, la actividad de los últimos meses y los puntos de atención.
+     Cada cifra es un atajo: lleva a su pestaña YA filtrada.
+   · Navegable: la pestaña vive en la dirección (#/analisis?tab=ideas), así
+     una recarga vuelve al mismo sitio; y "atrás" desde una pestaña regresa
+     al Resumen antes de salir al Inicio.
    ============================================================ */
+const AN_TABS_TODAS = [{ id: 'resumen', label: 'Resumen' }].concat(AN_TABS);
+const AN_PERM = { servicios: 'an.serv.ver', ideas: 'an.ideas.ver', comercio: 'an.com.ver' };
+
+function anTabDeHash() {
+  const m = /[?&]tab=([a-z]+)/.exec(location.hash || '');
+  return m ? m[1] : '';
+}
+function anIrTab(tab) {
+  if (!AN || AN.tab === tab) return;
+  AN.tab = tab;
+  try { history.replaceState(null, '', '#/analisis' + (tab === 'resumen' ? '' : '?tab=' + tab)); } catch (e) {}
+  $$('#an-tabs .seg-b').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  anPintarTab();
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+}
+
+/* Reparte lo que llegó en un viaje a las cuatro piezas (cada una puede venir
+   con ok:false si un invitado no tiene esa pastilla). */
+function anRepartir(d) {
+  const ok = x => (x && x.ok !== false) ? x : null;
+  AN.serv = ok(d && d.serv); AN.ideas = ok(d && d.ideas); AN.com = ok(d && d.com);
+  AN.res = ok(d && d.res) || { items: [], resenas: [], global: null };
+  AN.listo = true;
+}
+/* Tras una escritura ya aplicada en pantalla: la caché de sesión se queda con
+   lo de memoria y se borra la copia local. */
+function anSync() {
+  const c = RAP.tomar('priv.analisis');
+  if (c && c.data) { c.data.serv = AN.serv || c.data.serv; c.data.ideas = AN.ideas || c.data.ideas; c.data.com = AN.com || c.data.com; c.data.res = AN.res || c.data.res; }
+  RAP.tocar('priv.analisis');
+}
+async function anRecargar() {
+  const d = await rapTraer('priv.analisis', Object.assign(anAuth(), RAP.params()), SILENCIO);
+  if (!d || d.ok === false) return false;
+  RAP.guardar('priv.analisis', d, d.__rapCrudo || d);
+  anRepartir(d);
+  return true;
+}
+
 async function viewAnalisis(user) {
   AN_ME = user.documento;
-  /* 06/08/2026 · un invitado puede tener solo una de las tres pestañas: se
-     abre en la primera que sí pueda ver (las otras las quita permisos.js). */
-  const anTab0 = (AN_TABS.find(t => permOk({ servicios: 'an.serv.ver', ideas: 'an.ideas.ver', comercio: 'an.com.ver' }[t.id])) || AN_TABS[0]).id;
+  const puede = t => t === 'resumen' || permOk(AN_PERM[t]);
+  const pedida = anTabDeHash();
+  const anTab0 = (pedida && AN_TABS_TODAS.some(t => t.id === pedida) && puede(pedida)) ? pedida : 'resumen';
   AN = {
-    tab: anTab0, user,
+    tab: anTab0, user, listo: false,
     serv: null, ideas: null, com: null, res: null,   // res = estrellas y reseñas (03/08/2026)
     sFiltro: { est: new Set(), medio: new Set(), servicio: '', prof: '', q: '', eje: 'servicio' },
     iFiltro: { est: new Set(), cat: new Set(), q: '' },
@@ -6431,72 +6870,170 @@ async function viewAnalisis(user) {
   app.innerHTML = `${backbar('Análisis de Procesos')}
     <div class="pad stack">
       <div class="an-tabs seg" id="an-tabs">
-        ${AN_TABS.map(t => `<button class="seg-b ${t.id === anTab0 ? 'active' : ''}" data-tab="${t.id}">${esc(t.label)}</button>`).join('')}
+        ${AN_TABS_TODAS.filter(t => puede(t.id)).map(t => `<button class="seg-b ${t.id === anTab0 ? 'active' : ''}" data-tab="${t.id}">${esc(t.label)}</button>`).join('')}
       </div>
       <div id="an-body">${loadingBox('Cargando…')}</div>
     </div>`;
   app.hidden = false;
-  appWide(true);
-  $('#backbtn').onclick = () => go('home');
-  $$('#an-tabs .seg-b').forEach(b => b.onclick = () => {
-    if (AN.tab === b.dataset.tab) return;
-    $$('#an-tabs .seg-b').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    AN.tab = b.dataset.tab;
-    anPintarTab();
-  });
-  anPintarTab();
+  appWide(true, true);
+  $('#backbtn').onclick = () => { if (AN && AN.tab !== 'resumen') anIrTab('resumen'); else go('home'); };
+  $$('#an-tabs .seg-b').forEach(b => b.onclick = () => anIrTab(b.dataset.tab));
+
+  let primera = true;
+  try {
+    await rapCargar('priv.analisis', anAuth(), (d) => {
+      if (!$('#an-body')) return;
+      if (!d || d.ok === false) { if (primera) $('#an-body').innerHTML = `<p class="center muted" style="padding:26px 0;">No se pudo cargar.</p>`; return; }
+      anRepartir(d);
+      primera = false;
+      anPintarTab();
+    });
+  } catch (e) {
+    if ($('#an-body') && primera) $('#an-body').innerHTML = `<p class="center muted" style="padding:26px 0;">No se pudo cargar. ${esc(e.message || '')}</p>`;
+  }
 
   vivoBind('analisis', AN_ME, vivoAnalisis);   // EN VIVO
 }
 
 /* ---- EN VIVO · Análisis de Procesos ----
-   Solo se recarga la pestaña que se está mirando (las otras tres se guardan
-   en caché y se vuelven a pedir al entrar). Lo que llega de la app pública —
-   una idea nueva, una solicitud de servicio — aparece aquí sin refrescar. */
+   Un solo viaje trae las cuatro piezas; se repinta la pestaña que se mira. */
 async function vivoAnalisis(rev) {
-  const tab = AN.tab;
-  const accion = { servicios: 'priv.anServicios', ideas: 'priv.anIdeas', comercio: 'priv.anComercios' }[tab];
-  const llave  = { servicios: 'serv', ideas: 'ideas', comercio: 'com' }[tab];
-  if (!accion) return;
-  const r = await api(accion, anAuth(), 'GET', null, SILENCIO);
-  if (AN.tab !== tab) return;                       // cambió de pestaña mientras iba en vuelo
-  if (!vivoCambio(tab + '|' + JSON.stringify(r))) return;
-  AN[llave] = r;
-  if (tab === 'comercio') { try { AN.res = await api('priv.anResenas', anAuth(), 'GET', null, SILENCIO); } catch (e) { /* la reputación nunca tumba la vista */ } }
-  /* Las otras pestañas quedan marcadas para releerse al volver a entrar. */
-  ['serv', 'ideas', 'com'].forEach(k => { if (k !== llave) AN[k] = null; });
-  if (tab === 'servicios') anServPintar();
-  else if (tab === 'ideas') anIdeasPintar();
-  else anComPintar();
+  if (!AN) return;
+  const d = await rapTraer('priv.analisis', Object.assign(anAuth(), RAP.params()), SILENCIO);
+  if (!d || d.ok === false || !AN) return;
+  RAP.guardar('priv.analisis', d, d.__rapCrudo || d);
+  if (!vivoCambio(JSON.stringify(d))) return;
+  anRepartir(d);
+  anPintarTab();
   vivoCerrarHoja(rev);
 }
 
-async function anPintarTab() {
+function anPintarTab() {
   const body = $('#an-body');
-  if (!body) return;
+  if (!body || !AN || !AN.listo) return;
   const tab = AN.tab;
-  body.innerHTML = loadingBox('Cargando…');
-  try {
-    if (tab === 'servicios' && !AN.serv) AN.serv = await api('priv.anServicios', anAuth());
-    if (tab === 'ideas' && !AN.ideas) AN.ideas = await api('priv.anIdeas', anAuth());
-    if (tab === 'comercio' && !AN.com) AN.com = await api('priv.anComercios', anAuth());
-    /* 03/08/2026 · la reputación va en la misma tanda que los comercios, pero
-       aparte: si falla, la pestaña se pinta igual y solo se quedan en cero las
-       estrellas. Un añadido no puede tumbar lo que ya funcionaba. */
-    if (tab === 'comercio' && !AN.res) {
-      try { AN.res = await api('priv.anResenas', anAuth()); }
-      catch (e) { AN.res = { items: [], resenas: [], global: null }; }
-    }
-  } catch (e) {
-    if (AN.tab !== tab) return;
-    body.innerHTML = `<p class="center muted" style="padding:26px 0;">No se pudo cargar. ${esc(e.message || '')}</p>`;
-    return;
-  }
-  if (AN.tab !== tab) return; // el usuario cambió de pestaña mientras cargaba
+  if (tab === 'resumen') return anResumenPintar();
+  const pieza = { servicios: AN.serv, ideas: AN.ideas, comercio: AN.com }[tab];
+  if (!pieza) { body.innerHTML = `<p class="center muted" style="padding:26px 0;">No tienes acceso a esta pestaña o no se pudo cargar.</p>`; return; }
   if (tab === 'servicios') return anServPintar();
   if (tab === 'ideas') return anIdeasPintar();
   return anComPintar();
+}
+
+/* ============================================================
+   PESTAÑA 0 · RESUMEN
+   ============================================================ */
+const AN_MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function anMesDe(f) {
+  const m = String(f || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + String(m[2]).padStart(2, '0');
+  const i = String(f || '').match(/(\d{4})-(\d{2})-\d{2}/);
+  return i ? i[1] + '-' + i[2] : '';
+}
+function anUltimosMeses(n) {
+  const out = [], d = new Date();
+  for (let i = n - 1; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1); out.push(x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0')); }
+  return out;
+}
+function anPct(a, b) { return b ? Math.round(a * 100 / b) : 0; }
+
+function anResumenPintar() {
+  const serv = AN.serv ? (AN.serv.items || []) : null;
+  const ideas = AN.ideas ? (AN.ideas.ideas || []) : null;
+  const com = AN.com ? (AN.com.items || []) : null;
+  const g = (AN.res && AN.res.global) || null;
+  const cuenta = (arr, f) => arr ? arr.filter(f).length : 0;
+
+  /* --- tarjetas por área --- */
+  const tarjeta = (tab, titulo, total, sub, stats, barra) => `
+    <section class="an-area" data-ir="${tab}">
+      <header class="an-area-h"><span class="an-area-t">${esc(titulo)}</span><button type="button" class="an-area-go" data-ir="${tab}">Ver detalle ${I.chevR || '›'}</button></header>
+      <div class="an-area-big"><b>${Number(total).toLocaleString('es-CO')}</b><span>${esc(sub)}</span></div>
+      ${barra || ''}
+      <div class="an-area-stats">${stats.map(s => `<button type="button" class="an-stat ${s.cls || ''}" data-ir="${tab}" data-fx="${esc(s.fx || '')}"><b>${Number(s.n).toLocaleString('es-CO')}</b><span>${esc(s.l)}</span></button>`).join('')}</div>
+    </section>`;
+  const barraEst = (arr, estados, clsPre) => {
+    if (!arr || !arr.length) return '';
+    return `<div class="an-area-bar">${estados.map(e => { const n = cuenta(arr, x => x.estado === e.k); return n ? `<i class="${clsPre}${e.c}" style="flex:${n}" title="${esc(e.label)}: ${n}"></i>` : ''; }).join('')}</div>`;
+  };
+  const areas = [];
+  if (serv) {
+    const ate = cuenta(serv, x => x.estado === 'ATENDIDA');
+    areas.push(tarjeta('servicios', 'Servicios', serv.length, `solicitudes · ${anPct(ate, serv.length)}% resueltas`, [
+      { n: ate, l: 'Atendidas', fx: 'est:ATENDIDA', cls: 'an-st-ok' },
+      { n: serv.length - ate, l: 'En proceso', fx: 'proceso', cls: 'an-st-warn' },
+      { n: cuenta(serv, x => !x.responsable), l: 'Sin profesional', fx: 'sinprof', cls: 'an-st-bad' }
+    ], barraEst(serv, AN_SERV_EST, 'an-e-')));
+  }
+  if (ideas) {
+    areas.push(tarjeta('ideas', 'Ideas', ideas.length, 'propuestas de la comunidad', [
+      { n: cuenta(ideas, x => x.estado === 'PENDIENTE'), l: 'Pendientes', fx: 'iest:PENDIENTE', cls: 'an-st-bad' },
+      { n: cuenta(ideas, x => x.estado === 'A TENER EN CUENTA'), l: 'A tener en cuenta', fx: 'iest:A TENER EN CUENTA', cls: 'an-st-ok' },
+      { n: cuenta(ideas, x => x.estado === 'ANOTADA'), l: 'Anotadas', fx: 'iest:ANOTADA' }
+    ], barraEst(ideas, AN_IDEA_EST, 'an-ib-')));
+  }
+  if (com) {
+    const act = cuenta(com, x => x.visible);
+    const sinResp = g ? Math.max(0, (g.resenas || 0) - (g.respondidas || 0)) : 0;
+    areas.push(tarjeta('comercio', 'Comercio', com.length, `comercios · ${g && g.estrellas ? String(g.promedio).replace('.', ',') + ' ★ promedio' : 'sin calificaciones aún'}`, [
+      { n: act, l: 'En la app', fx: 'cest:ACTIVOS', cls: 'an-st-ok' },
+      { n: com.length - act, l: 'Ocultos', fx: 'cest:INACTIVOS' },
+      { n: sinResp, l: 'Reseñas sin responder', fx: '', cls: sinResp ? 'an-st-warn' : '' }
+    ]));
+  }
+
+  /* --- actividad: últimos 6 meses (servicios e ideas por fecha) --- */
+  const meses = anUltimosMeses(6);
+  const serie = meses.map(m => ({ m, s: serv ? cuenta(serv, x => anMesDe(x.fecha) === m) : 0, i: ideas ? cuenta(ideas, x => anMesDe(x.fecha) === m) : 0 }));
+  const max = Math.max(1, ...serie.map(x => Math.max(x.s, x.i)));
+  const hayAct = serie.some(x => x.s || x.i);
+  const actividad = (serv || ideas) ? `
+    <section class="an-card an-act">
+      <div class="an-card-h"><b>Actividad de los últimos 6 meses</b><span class="an-act-key">${serv ? '<span><i class="an-act-s"></i>Servicios</span>' : ''}${ideas ? '<span><i class="an-act-i"></i>Ideas</span>' : ''}</span></div>
+      ${hayAct ? `<div class="an-act-b">${serie.map(x => `
+        <div class="an-act-col" title="${esc(AN_MESES[+x.m.slice(5) - 1])} ${x.m.slice(0, 4)}: ${x.s} servicio(s), ${x.i} idea(s)">
+          <div class="an-act-bars">${serv ? `<i class="an-act-s" style="height:${(x.s / max * 100).toFixed(1)}%"><em>${x.s || ''}</em></i>` : ''}${ideas ? `<i class="an-act-i" style="height:${(x.i / max * 100).toFixed(1)}%"><em>${x.i || ''}</em></i>` : ''}</div>
+          <span>${esc(AN_MESES[+x.m.slice(5) - 1])}</span>
+        </div>`).join('')}</div>` : `<p class="center muted small" style="padding:14px 0;">Sin movimiento en estos meses.</p>`}
+    </section>` : '';
+
+  /* --- puntos de atención (todo lo que pide una acción) --- */
+  const alertas = [];
+  if (serv) { const n = cuenta(serv, x => !x.responsable); if (n) alertas.push({ n, t: 'solicitud(es) de servicio sin profesional asignado', tab: 'servicios', fx: 'sinprof' }); }
+  if (serv) { const n = cuenta(serv, x => x.estado === 'PENDIENTE'); if (n) alertas.push({ n, t: 'servicio(s) en estado Pendiente', tab: 'servicios', fx: 'est:PENDIENTE' }); }
+  if (ideas) { const n = cuenta(ideas, x => x.estado === 'PENDIENTE'); if (n) alertas.push({ n, t: 'idea(s) sin leer', tab: 'ideas', fx: 'iest:PENDIENTE' }); }
+  if (g) { const n = Math.max(0, (g.resenas || 0) - (g.respondidas || 0)); if (n && com) alertas.push({ n, t: 'reseña(s) de comercios sin responder', tab: 'comercio', fx: '' }); }
+  const atencion = `<section class="an-card an-alertas">
+      <div class="an-card-h"><b>Puntos de atención</b></div>
+      ${alertas.length ? alertas.map(a => `<button type="button" class="an-alerta an-alerta-go" data-ir="${a.tab}" data-fx="${esc(a.fx)}"><span class="an-al-n">${a.n.toLocaleString('es-CO')}</span><div>${esc(a.t)}</div>${I.chevR || ''}</button>`).join('')
+        : `<p class="center muted small" style="padding:12px 0;">Todo al día: no hay nada pendiente.</p>`}
+    </section>`;
+
+  $('#an-body').innerHTML = `
+    <div class="an-areas">${areas.join('') || `<p class="center muted" style="padding:20px 0;">No tienes acceso a ninguna pestaña de análisis.</p>`}</div>
+    <div class="an-res-cols">${actividad}${atencion}</div>`;
+
+  $$('#an-body [data-ir]').forEach(el => el.onclick = (ev) => {
+    ev.stopPropagation();
+    anAtajo(el.dataset.ir, el.dataset.fx || '');
+  });
+}
+
+/* Lleva a una pestaña con el filtro ya puesto */
+function anAtajo(tab, fx) {
+  if (tab === 'servicios') {
+    AN.sFiltro = { est: new Set(), medio: new Set(), servicio: '', prof: '', q: '', eje: AN.sFiltro.eje };
+    if (fx.indexOf('est:') === 0) AN.sFiltro.est.add(fx.slice(4));
+    else if (fx === 'proceso') AN_SERV_EST.forEach(e => { if (e.k !== 'ATENDIDA') AN.sFiltro.est.add(e.k); });
+    else if (fx === 'sinprof') AN.sFiltro.prof = '(Sin responsable)';
+  } else if (tab === 'ideas') {
+    AN.iFiltro = { est: new Set(), cat: new Set(), q: '' };
+    if (fx.indexOf('iest:') === 0) AN.iFiltro.est.add(fx.slice(5));
+  } else if (tab === 'comercio') {
+    AN.cFiltro = { est: 'TODOS', cat: 'TODAS', q: '' };
+    if (fx.indexOf('cest:') === 0) AN.cFiltro.est = fx.slice(5);
+  }
+  if (AN.tab === tab) anPintarTab(); else anIrTab(tab);
 }
 
 /* Barras apiladas horizontales, hechas a mano (no hay librería de gráficos) */
@@ -6831,6 +7368,7 @@ async function anIdeaEstado(id, estado, btn) {
   try {
     await api('priv.anIdeaEstado', {}, 'POST', Object.assign(anAuth(), { id, estado }));
     if (idea) idea.estado = estado;
+    anSync();
     if (estado !== 'A TENER EN CUENTA') AN.iSel.delete(id);
     toast(estado === 'LEIDA' ? 'Marcada como leída' : 'Marcada para tener en cuenta');
     anIdeasPintar();
@@ -6880,9 +7418,9 @@ async function anIdeasPdf(btn) {
     if (!r || !r.base64) throw new Error('El documento llegó vacío');
     downloadB64(r.base64, r.mime, r.filename);
     AN.iSel.clear();
-    AN.ideas = null;                       // recargar estados + cortes
     toast(`Corte ${(r.corte && r.corte.id) || ''} generado`);
-    await anPintarTab();
+    await anRecargar();                    // estados + cortes nuevos (un viaje, en silencio)
+    anPintarTab();
   } catch (e) {
     saving(btn, false);
     toast(e.message || 'No se pudo crear el documento', 'err');
@@ -7129,6 +7667,7 @@ async function anResOcultar(id, val, btn) {
   try {
     await api('priv.anResenaOcultar', {}, 'POST', Object.assign({ id: id, ocultar: val }, anAuth()));
     AN.res = await api('priv.anResenas', anAuth());
+    anSync();
     anResPintarModal();
     const l = $('#an-c-list');
     if (l) { l.innerHTML = anComCards(anComFiltrados()); anComBind(); }
@@ -7167,6 +7706,7 @@ async function anComEstado(nit, estado, btn) {
     const body = Object.assign(anAuth(), { nit, estado });
     const r = await api('priv.anComercioEstado', {}, 'POST', body);
     it.estado = r.estado; it.visible = !!r.visible;
+    anSync();
     toast(apagar ? 'Comercio oculto de la app pública' : 'Comercio visible en la app pública');
     anComPintar();
   } catch (e) {
