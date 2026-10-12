@@ -466,9 +466,12 @@ function vivoEscuchar() {
       if (VIVO.canal !== canal) return;
       VIVO.fbOk = true;
       const rev = snap && snap.val();
-      if (!rev || !rev.ts) return;
+      if (!rev || !rev.ts) { VIVO.base = true; return; }
       if (!VIVO.base) { VIVO.base = true; VIVO.ts = rev.ts; return; }   // el primer disparo es el valor actual
-      if (rev.ts > VIVO.ts) vivoDisparar(rev);
+      /* 12/10/2026 · la señal pública ya no trae la cédula tocada: solo la
+         hora. Cuando cambia, el detalle (doc/prev) se pide con sesión a
+         priv.rev, que es quien decide si basta traer una tarjeta. */
+      if (rev.ts > VIVO.ts) vivoSondear(true);   // true: también en segundo plano (vivoCorrer lo deja pendiente)
     }, () => { if (VIVO.canal === canal) vivoRespaldo(); /* reglas cerradas: entra el sondeo de respaldo */ });
   }).catch(() => { if (VIVO.canal === canal) vivoRespaldo(); });
 }
