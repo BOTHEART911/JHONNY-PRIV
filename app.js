@@ -854,8 +854,21 @@ function avFotoMini(foto) {
 }
 function avatarHtml(nombre, foto, extra) {
   const src = avFotoMini(foto);
-  return `<span class="av ${extra || ''}" style="--av:${avColor(nombre)}" aria-hidden="true"><b>${esc(avIniciales(nombre))}</b>${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+  const grande = src ? bdFotoUrl(foto) : '';
+  return `<span class="av ${extra || ''}${src ? ' av-zoom' : ''}" style="--av:${avColor(nombre)}"${src ? ` data-zoom="${esc(grande)}" role="button" tabindex="0" title="Ver foto" aria-label="Ver foto de ${esc(nombre || '')}"` : ' aria-hidden="true"'}><b>${esc(avIniciales(nombre))}</b>${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('av-zoom');this.remove()">` : ''}</span>`;
 }
+/* Tocar la foto de una tarjeta la abre en el visor con zoom (el mismo de
+   Detalles), a tamaño completo. Va en fase de captura para que el toque no
+   dispare además la acción de la tarjeta (seleccionar, abrir, etc.). Si la
+   foto no cargó, se quedan las iniciales y el toque sigue de largo. */
+function avZoomDe(ev) {
+  const a = ev.target && ev.target.closest ? ev.target.closest('.av[data-zoom]') : null;
+  if (!a || !a.querySelector('img')) return;
+  ev.preventDefault(); ev.stopPropagation();
+  zoomImagen(a.dataset.zoom);
+}
+document.addEventListener('click', avZoomDe, true);
+document.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target && ev.target.matches && ev.target.matches('.av[data-zoom]')) avZoomDe(ev); }, true);
 
 /* ============================================================
    SELECTOR DE FECHA ESTILO iOS  (ruedas · portado de SEP-GROUP)

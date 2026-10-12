@@ -60,6 +60,11 @@
 
   /* ---- caché ---- */
   function clave(accion) { return NS + usuario + ':' + accion; }
+  /* Versión del CORE que vio esta pestaña (la anota red.js). Una copia local
+     armada con otro CORE se descarta: su forma puede ser distinta (p. ej. la
+     lista de antes de desplegar no traía foto). */
+  var LS_V = (raiz.STORAGE_NS || (raiz.MARCA && raiz.MARCA.STORAGE_NS) || 'jp') + ':coreV';
+  function coreV() { try { return sessionStorage.getItem(LS_V) || ''; } catch (e) { return ''; } }
   function setUsuario(doc) {
     doc = String(doc || '');
     if (doc === usuario) return;
@@ -67,11 +72,12 @@
     usuario = doc;
   }
   function guardar(accion, data, crudo) {
-    mem[accion] = { data: data, rv: Object.assign({}, (data && data.rv) || {}), u: usuario };
-    if (crudo) { try { sessionStorage.setItem(clave(accion), JSON.stringify({ rv: mem[accion].rv, c: crudo })); } catch (e) {} }
+    mem[accion] = { data: data, rv: Object.assign({}, (data && data.rv) || {}), u: usuario, v: coreV() };
+    if (crudo) { try { sessionStorage.setItem(clave(accion), JSON.stringify({ rv: mem[accion].rv, v: mem[accion].v, c: crudo })); } catch (e) {} }
   }
   function tomar(accion) {
     var e = mem[accion];
+    if (e && e.v && coreV() && e.v !== coreV()) { delete mem[accion]; return null; }
     return (e && e.u === usuario) ? e : null;
   }
   /* Desde sessionStorage (tras recargar la página) */
@@ -80,6 +86,7 @@
     var s = null;
     try { s = JSON.parse(sessionStorage.getItem(clave(accion)) || 'null'); } catch (e) { s = null; }
     if (!s || !s.c) return null;
+    if (!s.v || (coreV() && s.v !== coreV())) { try { sessionStorage.removeItem(clave(accion)); } catch (x) {} return null; }
     try {
       var data = await abrir(s.c);
       if (!data) return null;

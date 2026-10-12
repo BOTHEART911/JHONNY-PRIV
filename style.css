@@ -2654,3 +2654,6 @@ table.asis-t th, table.asis-t td { display: table-cell !important; }
 .an-alerta-go > div { flex: 1; }
 .an-alerta-go svg { width: 14px; height: 14px; color: var(--muted); }
 body.wide-xl .an-tabs { max-width: 640px; }
+.av.av-zoom { cursor: zoom-in; transition: transform .15s; }
+.av.av-zoom:hover { transform: scale(1.06); }
+.av.av-zoom:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
