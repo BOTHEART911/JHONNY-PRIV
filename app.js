@@ -90,19 +90,41 @@ const VIVO_DEV = (() => {
   } catch (e) { return nuevo(); }
 })();
 
+/* 12/10/2026 · Fase 1: el viaje lo hace red.js (pieza común del ecosistema):
+   token de sesión tomado al despachar, rid en escrituras, corte al cambiar de
+   vista, cola de fondo, reintento seguro y versión del backend. Aquí solo se
+   decide el loader y qué hacer con la respuesta.
+   Una lectura cortada (la vista se fue) devuelve una promesa que nunca se
+   resuelve: el código de la vista vieja simplemente no sigue. */
 async function api(action, params = {}, method = 'GET', body = null, opts = {}) {
   if (API_URL.startsWith('PEGA_AQUI')) { toast('Falta configurar la URL del backend', 'err'); throw new Error('API_URL sin configurar'); }
-  const qs = new URLSearchParams(Object.assign({ action, dev: VIVO_DEV }, params)).toString();
-  const req = { method };
-  if (method === 'POST') { req.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; req.body = JSON.stringify(body || {}); }
   const callado = !!opts.silent;
   if (!callado) loaderOn();
+  let json;
   try {
-    const res = await fetch(`${API_URL}?${qs}`, req);
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Error del servidor');
-    return json.data;
-  } finally { if (!callado) loaderOff(); }
+    json = await RED.pedir(API_URL, action, Object.assign({ dev: VIVO_DEV }, params),
+      { metodo: method, cuerpo: method === 'POST' ? (body || {}) : null, fondo: callado && RED.esLectura(action) });
+  } catch (e) {
+    if (!callado) loaderOff();
+    if (e && e.cortado) return new Promise(() => {});
+    throw e;
+  }
+  if (!callado) loaderOff();
+  if (!json.ok) {
+    if (json.error === 'SESION_VENCIDA') { sesionVencida(); return new Promise(() => {}); }
+    throw new Error(json.error || 'Error del servidor');
+  }
+  return json.data;
+}
+/* Sesión firmada vencida o inválida: se borra el token y se pide el PIN otra
+   vez (una sola vez, aunque lleguen varias respuestas juntas). */
+let _sesionVencidaAviso = false;
+function sesionVencida() {
+  const s = getActive();
+  if (s) { delete s.tk; saveSession(s); }
+  localStorage.removeItem(ACT_KEY);
+  if (!_sesionVencidaAviso) { _sesionVencidaAviso = true; toast('Tu sesión venció. Ingresa tu PIN de nuevo.', 'err'); setTimeout(() => { _sesionVencidaAviso = false; }, 4000); }
+  go('login');
 }
 
 /* ---------- Sesiones privadas en el dispositivo ----------
@@ -113,6 +135,8 @@ const SS_KEY = nsKey('jpriv_sessions'), ACT_KEY = nsKey('jpriv_active');
 const getSessions = () => { try { return JSON.parse(localStorage.getItem(SS_KEY)) || []; } catch { return []; } };
 function saveSession(u) { const list = getSessions().filter(x => x.documento !== u.documento); list.unshift(u); localStorage.setItem(SS_KEY, JSON.stringify(list.slice(0, 6))); localStorage.setItem(ACT_KEY, u.documento); }
 const getActive = () => { const d = localStorage.getItem(ACT_KEY); return getSessions().find(x => x.documento === d) || null; };
+/* red.js toma el token de aquí AL DESPACHAR cada llamada (12/10/2026) */
+RED.sesion(() => { const u = getActive(); return u ? { tk: u.tk || '', id: u.documento } : null; });
 const setActive = (doc) => localStorage.setItem(ACT_KEY, doc);
 function forgetSession(doc) { const list = getSessions().filter(x => x.documento !== doc); localStorage.setItem(SS_KEY, JSON.stringify(list)); if (localStorage.getItem(ACT_KEY) === doc) localStorage.removeItem(ACT_KEY); }
 function logout() { localStorage.removeItem(ACT_KEY); go('login'); }
@@ -297,6 +321,7 @@ function menuParaRol(rol) {
 function go(route) { location.hash = '#/' + route; }
 window.addEventListener('hashchange', render);
 function render() {
+  RED.nuevaVista();   /* 12/10/2026 · corta las lecturas de la vista que se va (salvo las que la nueva herede) */
   if (window.__votoTeardown) { try { window.__votoTeardown(); } catch (e) {} window.__votoTeardown = null; }
   /* EN VIVO: cada vista enciende su canal al montar; aquí se apaga el de la
      vista que se deja. Va aparte de __votoTeardown a propósito: ese gancho ya
@@ -392,6 +417,8 @@ function vivoTeardown() {
   if (VIVO.poll) { clearInterval(VIVO.poll); VIVO.poll = null; }
   if (VIVO.ref && VIVO.onVal) { try { VIVO.ref.off('value', VIVO.onVal); } catch (e) {} }
   if (VIVO.t) { clearTimeout(VIVO.t); VIVO.t = null; }
+  if (VIVO.t0) { clearTimeout(VIVO.t0); VIVO.t0 = null; }
+  VIVO.fbOk = false;
   VIVO.ref = null; VIVO.onVal = null; VIVO.canal = ''; VIVO.load = null;
   VIVO.firma = ''; VIVO.ts = 0; VIVO.base = false; VIVO.corriendo = false; VIVO.pend = null;
 }
@@ -400,9 +427,18 @@ function vivoTeardown() {
 function vivoBind(canal, caller, load) {
   vivoTeardown();
   VIVO.canal = canal; VIVO.caller = caller; VIVO.load = load;
-  vivoSondear(true);                                   // fija la referencia inicial
-  VIVO.poll = setInterval(() => vivoSondear(false), VIVO_POLL_MS);
+  /* 12/10/2026 · Fase 1: con Firebase conectado NO hay reloj ni priv.rev
+     inicial (antes salían siempre: un viaje de ~3 s extra por vista y uno
+     cada 12 s). El sondeo queda SOLO como respaldo: si Firebase no entrega
+     su primer valor en 6 s, o sus reglas lo niegan. */
   vivoEscuchar();
+  const canalAhora = canal;
+  VIVO.t0 = setTimeout(() => { if (VIVO.canal === canalAhora && !VIVO.fbOk) vivoRespaldo(); }, 6000);
+}
+function vivoRespaldo() {
+  if (VIVO.poll || !VIVO.canal) return;
+  vivoSondear(true);
+  VIVO.poll = setInterval(() => vivoSondear(false), VIVO_POLL_MS);
 }
 
 /* Respaldo: pregunta por los sellos de tiempo (no por los datos) */
@@ -428,12 +464,13 @@ function vivoEscuchar() {
     VIVO.ref = fb.database().ref('meta/' + canal + '_rev');
     VIVO.onVal = VIVO.ref.on('value', snap => {
       if (VIVO.canal !== canal) return;
+      VIVO.fbOk = true;
       const rev = snap && snap.val();
       if (!rev || !rev.ts) return;
       if (!VIVO.base) { VIVO.base = true; VIVO.ts = rev.ts; return; }   // el primer disparo es el valor actual
       if (rev.ts > VIVO.ts) vivoDisparar(rev);
-    }, () => { /* reglas cerradas o sin permiso: queda el sondeo, no se avisa */ });
-  }).catch(() => {});
+    }, () => { if (VIVO.canal === canal) vivoRespaldo(); /* reglas cerradas: entra el sondeo de respaldo */ });
+  }).catch(() => { if (VIVO.canal === canal) vivoRespaldo(); });
 }
 
 function vivoDisparar(rev) {
@@ -454,7 +491,7 @@ async function vivoCorrer(rev) {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || !VIVO.canal) return;
   const p = VIVO.pend; VIVO.pend = null;
-  if (p) vivoCorrer(p); else vivoSondear(false);
+  if (p) vivoCorrer(p); else if (VIVO.poll) vivoSondear(false);   // con Firebase, la señal llega sola
 });
 
 /* ¿De verdad cambió algo? Evita repintar (y perder el scroll y el "Ver más")
@@ -586,8 +623,18 @@ function submitPin() {
 async function loginCon(pin, btn) {
   saving(btn, true);
   try {
-    const r = await api('priv.login', {}, 'POST', { pin });
+    /* 12/10/2026 · si el CORE pidió el documento (tope global de intentos),
+       viaja también; si no hay campo, viaja solo el PIN como siempre. */
+    const docIn = $('#pin-doc');
+    const cuerpo = { pin };
+    if (docIn && onlyDig(docIn.value)) cuerpo.documento = onlyDig(docIn.value);
+    const r = await api('priv.login', {}, 'POST', cuerpo);
     saving(btn, false);
+    if (!r.ok && r.pideDocumento && !docIn) {
+      const pad = $('#pin-pad');
+      if (pad) pad.insertAdjacentHTML('beforebegin', `<input class="input" id="pin-doc" inputmode="numeric" autocomplete="off" placeholder="Tu número de documento" style="margin:0 auto 12px;max-width:260px;text-align:center" />`);
+      onlyDigits($('#pin-doc'));
+    }
     if (!r.ok) { pinBuffer = ''; paintPin(); return toast(r.msg || 'No se pudo iniciar sesión', 'err'); }
     saveSession(r.user);
     go('home');
@@ -640,6 +687,8 @@ async function refrescarMiFoto(user) {
   try {
     const r = await api('priv.miPerfil', {}, 'POST', { caller: user.documento });
     if (!r || !r.ok) return;
+    /* 12/10/2026 · el CORE renueva la sesión firmada cuando le quedan < 7 días */
+    if (r.tk) { const sp = getSessions().find(x => x.documento === user.documento); if (sp) { sp.tk = r.tk; user.tk = r.tk; saveSession(sp); } }
     /* 06/08/2026 · si a un invitado le cambiaron las pastillas mientras tenía
        la sesión abierta, se le aplican aquí (el Inicio llama a este endpoint
        en cada entrada) sin obligarlo a volver a entrar. */
