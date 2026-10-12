@@ -296,7 +296,7 @@ function paintVersion(v) { $$('.app-version-line').forEach(el => el.textContent 
 async function checkVersion() {
   if (__verInFlight) return; __verInFlight = true;
   try {
-    const r = await fetch('./version.js?t=' + Date.now(), { cache: 'no-store' });
+    const r = await fetch('./js/version.js?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) return;
     const raw = await r.text();
     const m = raw.match(/version['"]?\s*[:=]\s*['"]([^'"]+)['"]/i) || raw.match(/(\d{4}\.\d{2}\.\d{2}\.\d+|\d+\.\d+(?:\.\d+)?)/);
@@ -1969,7 +1969,7 @@ function cargarXlsx() {
   if (BD_XLSX_LIB) return BD_XLSX_LIB;
   BD_XLSX_LIB = new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'vendor/xlsx.mini.min.js';
+    s.src = 'js/vendor/xlsx.mini.min.js';
     s.onload = () => window.XLSX ? res(window.XLSX) : rej(new Error('lector'));
     s.onerror = () => { BD_XLSX_LIB = null; rej(new Error('lector')); };
     document.head.appendChild(s);
@@ -8427,10 +8427,10 @@ function cfLeaflet() {
   CF_LEAFLET = new Promise((res, rej) => {
     if (window.L) return res(window.L);
     const css = document.createElement('link');
-    css.rel = 'stylesheet'; css.href = './vendor/leaflet.css';
+    css.rel = 'stylesheet'; css.href = './css/vendor/leaflet.css';
     document.head.appendChild(css);
     const sc = document.createElement('script');
-    sc.src = './vendor/leaflet.js';
+    sc.src = './js/vendor/leaflet.js';
     sc.onload = () => window.L ? res(window.L) : rej(new Error('leaflet'));
     sc.onerror = () => { CF_LEAFLET = null; rej(new Error('leaflet')); };
     document.head.appendChild(sc);
