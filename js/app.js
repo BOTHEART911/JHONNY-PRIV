@@ -4078,6 +4078,9 @@ function votoTeardown() {
   if (VOTO_ref && VOTO_onVal) { try { VOTO_ref.off('value', VOTO_onVal); } catch (e) {} }
   VOTO_onVal = null;
   if (VOTO_reloadT) { clearTimeout(VOTO_reloadT); VOTO_reloadT = null; }
+  if (VOTO_LID_T) { clearTimeout(VOTO_LID_T); VOTO_LID_T = null; }
+  if (VOTO_ref2 && VOTO_onVal2) { try { VOTO_ref2.off('value', VOTO_onVal2); } catch (e) {} }
+  VOTO_ref2 = null; VOTO_onVal2 = null;
 }
 
 async function viewVotacion(user) {
@@ -4106,7 +4109,7 @@ async function viewVotacion(user) {
   app.hidden = false; hideSplash();
 
   $('#backbtn').onclick = () => { votoTeardown(); window.__votoTeardown = null; go('bd'); };
-  $$('#voto-tabs .seg-b').forEach(b => b.onclick = () => { VOTO_TAB = b.dataset.t; $$('#voto-tabs .seg-b').forEach(x => x.classList.toggle('active', x === b)); votoRenderCounters(); });
+  $$('#voto-tabs .seg-b').forEach(b => b.onclick = () => { VOTO_TAB = b.dataset.t; $$('#voto-tabs .seg-b').forEach(x => x.classList.toggle('active', x === b)); votoRenderCounters(); if (VOTO_TAB === 'porLider' && VOTO_LID_VIEJO) votoLideresLuego(); });
   let tq; $('#voto-q').oninput = (e) => { VOTO_Q = e.target.value; clearTimeout(tq); tq = setTimeout(votoRenderCounters, 140); };
   $('#voto-xls').onclick = () => votoExport('excel');
   $('#voto-pdf').onclick = () => votoExport('pdf');
@@ -4114,9 +4117,8 @@ async function viewVotacion(user) {
 
   await votoLoad(false);
   elecCronoBind('voto-crono', 'horas');
-  /* 13/10/2026 · Fase 2: /meta ya es legible, así que la señal de Firebase
-     manda y NO hay reloj de 7 s. El sondeo queda solo de respaldo: si Firebase
-     no carga, niega la lectura o no entrega su primer valor en 6 s. */
+  /* 13/10/2026 · Fase 2: sin reloj de 7 s; el sondeo queda solo de respaldo.
+     12/10 · Fase 3: los conteos llegan de /votacion (ver votoAplicarVivo). */
   votoInitFirebase();
 }
 function votoRespaldo() {
@@ -4130,16 +4132,43 @@ async function votoLoad(manual) {
        sin loader. Solo el botón "Actualizar ahora" muestra carga. */
     const r = await api('voto.contadores', { caller: VOTO_ME }, 'GET', null, manual ? {} : SILENCIO);
     /* cada sondeo trae la hora del servidor → el regresivo se resincroniza */
-    if (r.ok) { VOTO_TALLY = r.tally; elecSet(r.eleccion); VOTO_last = Date.now(); votoRenderCounters(); if (manual) toast('Actualizado', 'ok'); }
+    if (r.ok) { VOTO_TALLY = r.tally; VOTO_LID_VIEJO = false; VOTO_LID_ULT = Date.now(); elecSet(r.eleccion); VOTO_last = Date.now(); votoRenderCounters(); if (manual) toast('Actualizado', 'ok'); }
   } catch (e) { if (manual) toast('No se pudo actualizar', 'err'); }
 }
 
-/* Firebase RTDB como SEÑAL de cambio.
-   17/07/2026 — CORREGIDO: esto escuchaba /votacion, un nodo que NADIE escribía
-   (ni la app ni ninguno de los .gs del CORE): era código muerto y el tablero
-   vivía solo del sondeo de 7 s. Ahora escucha /meta/votacion_rev, que SÍ se
-   escribe: voto.registrar toca el timbre en el router (Vivo.gs). El sondeo de
-   7 s se mantiene tal cual como respaldo. */
+/* 12/10/2026 · Fase 3 — los conteos llegan DIRECTO de Firebase.
+   El CORE escribe /votacion en cada voto (total, puestos y mesas; nunca
+   nombres de líderes: ese nodo es de lectura pública). Así el tablero ya no
+   pide voto.contadores por cada voto (antes: 2–3 s en el servidor por voto
+   y por dispositivo). Bases, catálogo y líderes salen de la carga inicial;
+   los líderes se refrescan solo con esa pestaña a la vista y como mucho una
+   vez cada 15 s. Si /votacion no se deja leer, se vuelve a la señal de
+   meta/votacion_rev (como antes) y, sin Firebase, al sondeo de respaldo. */
+let VOTO_LID_T = null, VOTO_LID_VIEJO = false, VOTO_LID_ULT = 0;
+function votoPct(n, base) { return base ? Math.round(n * 10000 / base) / 100 : 0; }
+function votoAplicarVivo(v) {
+  if (!v || typeof v.total !== 'number') return false;
+  const mapa = (o) => { const m = {}; Object.keys(o || {}).forEach(k => { const x = o[k]; if (x && x.l != null) m[String(x.l)] = Number(x.n) || 0; }); return m; };
+  const fusionar = (arr, m) => {
+    const vistos = {};
+    const out = (arr || []).map(x => { vistos[x.label] = 1; const n = (x.label in m) ? m[x.label] : x.n; return Object.assign({}, x, { n, pct: votoPct(n, x.base) }); });
+    Object.keys(m).forEach(l => { if (!vistos[l] && m[l]) out.push({ label: l, n: m[l], base: 0, pct: 0 }); });
+    return out.sort((a, b) => b.n - a.n || String(a.label).localeCompare(b.label));
+  };
+  VOTO_TALLY = Object.assign({}, VOTO_TALLY, {
+    total: v.total, pct: votoPct(v.total, VOTO_TALLY.base || 0),
+    porPuesto: fusionar(VOTO_TALLY.porPuesto, mapa(v.puesto)),
+    porMesa: fusionar(VOTO_TALLY.porMesa, mapa(v.mesa))
+  });
+  return true;
+}
+function votoLideresLuego() {
+  VOTO_LID_VIEJO = true;
+  if (VOTO_TAB !== 'porLider' || VOTO_LID_T) return;
+  const falta = Math.max(0, 15000 - (Date.now() - VOTO_LID_ULT));
+  VOTO_LID_T = setTimeout(() => { VOTO_LID_T = null; if ($('#voto-counters') && VOTO_TAB === 'porLider') votoLoad(false); }, falta);
+}
+
 function votoInitFirebase() {
   let llego = false;
   const t0 = setTimeout(() => { if (!llego) votoRespaldo(); }, 6000);
@@ -4147,15 +4176,27 @@ function votoInitFirebase() {
     if (!$('#voto-counters')) return;                    // ya salió de la vista
     VOTO_fb = fb;
     (fb.apps && fb.apps.length) ? fb.app() : fb.initializeApp(VOTO_FBCFG);
-    VOTO_ref = fb.database().ref('meta/votacion_rev');
-    let primero = true;
-    VOTO_onVal = VOTO_ref.on('value', () => {
+    VOTO_ref = fb.database().ref('votacion');
+    VOTO_onVal = VOTO_ref.on('value', (snap) => {
       llego = true; clearTimeout(t0);
-      if (primero) { primero = false; return; }          // el primer disparo es el valor actual: ya se cargó
-      if (VOTO_reloadT) return;
-      VOTO_reloadT = setTimeout(() => { VOTO_reloadT = null; votoLoad(false); }, 600);
-    }, () => { clearTimeout(t0); votoRespaldo(); });
+      if (votoAplicarVivo(snap.val())) { VOTO_last = Date.now(); votoRenderCounters(); votoLideresLuego(); }
+      else if (!VOTO_ref2) votoSenalVieja(fb, t0, () => { llego = true; });   // CORE sin conteos en vivo todavía
+    }, () => { votoSenalVieja(fb, t0, () => { llego = true; }); });
   }).catch(() => { clearTimeout(t0); votoRespaldo(); });
+}
+
+/* Respaldo: la señal de antes (meta/votacion_rev) + voto.contadores */
+let VOTO_ref2 = null, VOTO_onVal2 = null;
+function votoSenalVieja(fb, t0, marcar) {
+  if (!$('#voto-counters') || VOTO_ref2) return;
+  VOTO_ref2 = fb.database().ref('meta/votacion_rev');
+  let primero = true;
+  VOTO_onVal2 = VOTO_ref2.on('value', () => {
+    marcar(); clearTimeout(t0);
+    if (primero) { primero = false; return; }
+    if (VOTO_reloadT) return;
+    VOTO_reloadT = setTimeout(() => { VOTO_reloadT = null; votoLoad(false); }, 600);
+  }, () => { clearTimeout(t0); votoRespaldo(); });
 }
 
 function votoRenderCounters() {
