@@ -46,7 +46,9 @@
    'pub.liderServicios pub.liderCompromisos pub.liderSolicitudes pub.casa pub.emergencia ' +
    'priv.permCatalogo priv.configList priv.cfgPuestos priv.cfgPuestoImpacto priv.botEstado priv.botBlacklist ' +
    'priv.balances priv.liderBuscarDoc priv.liderAhijados priv.liderActivarInfo priv.iaEstado priv.iaModelos ' +
-   'priv.vozEstado priv.vozVoces priv.contactoBuscar')
+   'priv.vozEstado priv.vozVoces priv.contactoBuscar ' +
+   /* 03/11/2026 · informe de bitácoras (solo lectura) */
+   'priv.liderBitacoraInforme')
     .split(/\s+/).forEach(function (a) { if (a) LECTURAS[a] = true; });
 
   var T_LECTURA = 30000, T_ESCRITURA = 60000;
@@ -229,6 +231,8 @@
     esLectura: esLectura,
     sesion: function (fn) { proveedorSesion = fn; },
     medidas: function () { return medidas.slice(); },
+    /* Tiempo de pantalla (ms) medido por la vista: entra a la misma tabla */
+    pantalla: function (a, ms) { medidas.push({ a: 'pantalla:' + a, ms: Math.round(ms), kb: 0, n: 0, t: Date.now() }); if (medidas.length > 300) medidas.shift(); },
     tabla: function () { try { console.table(medidas.slice(-40)); } catch (e) {} },
     get escriturasEnVuelo() { return escriturasEnVuelo; }
   };

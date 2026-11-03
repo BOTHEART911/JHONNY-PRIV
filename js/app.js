@@ -351,6 +351,7 @@ function saving(btn, on) { if (!btn) return; btn.disabled = on; btn.dataset.txt 
 
 /* ---------- Íconos ---------- */
 const I = {
+  book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M19 19v3H6.5"/><path d="M8 7h7M8 11h5"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>',
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
   swap:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3 21 7l-4 4"/><path d="M21 7H9"/><path d="M7 21 3 17l4-4"/><path d="M3 17h12"/></svg>',
@@ -2649,13 +2650,14 @@ async function ldActivar(cod) {
 }
 
 async function viewLideres(user) {
-  LD_ME = user.documento; appWide(true, true);
+  LD_ME = user.documento; LD_USER = user; appWide(true, true);
   app.innerHTML = `${backbar('Líderes')}
     <div class="pad">
       <div class="bd-toolbar">
         <div class="bd-search"><input class="input" id="ld-q" placeholder="Buscar por código, nombre, documento, residencia o padrino…" autocomplete="off" /></div>
         <button class="btn btn-ghost" id="ld-memoria">${I.chart} Memoria mensual</button>
         <button class="btn btn-ghost" id="ld-exp">${I.download} Exportar</button>
+        <button class="btn btn-ghost" id="ld-bitinf" title="Informe de bitácoras por meses (PDF o Excel)">${I.book} Bitácoras</button>
         <button class="btn btn-primary bd-add" id="ld-add">+ Agregar</button>
       </div>
       <div class="ld-legend">
@@ -2674,6 +2676,7 @@ async function viewLideres(user) {
   $('#ld-add').onclick = () => ldAgregar();
   $('#ld-memoria').onclick = () => ldMemoria();
   $('#ld-exp').onclick = () => ldExportar();
+  $('#ld-bitinf').onclick = () => ldBitInforme();
   let primera = true;
   try {
     await rapCargar('priv.lideres', ldAuth(), (r) => {
@@ -3484,6 +3487,11 @@ function ldMesDetHtml(m) {
    siempre). Editar: solo quien la escribió (propia=true, lo decide el
    CORE). No se borra. Al guardar se parcha la lista en memoria: no se
    vuelve a pedir nada.
+   03/11/2026 (2) · DOS CAMPOS: Refiere y Compromiso. Los dos opcionales,
+   pero no se guarda con los dos vacíos (lo revisan el formulario y el CORE).
+   Las de antes (un solo texto) se ven como "Nota"; si su autor la edita, el
+   texto entra en Refiere y queda en el formato nuevo. Se manda también
+   `texto` armado para que un CORE anterior la guarde igual.
    ============================================================ */
 let LD_BIT = { cod: '', ok: false, items: [] };
 function ldBitDe(mes) { return LD_BIT.ok ? LD_BIT.items.filter(b => b.mes === mes) : []; }
@@ -3493,12 +3501,33 @@ function ldBitFecha(f) {
   const hh = parseInt(m[4], 10), ap = hh < 12 ? 'a. m.' : 'p. m.', h12 = ((hh + 11) % 12) + 1;
   return `${parseInt(m[3], 10)} ${(LD_MESES_TXT[parseInt(m[2], 10) - 1] || '').slice(0, 3).toLowerCase()} ${m[1]} · ${h12}:${m[5]} ${ap}`;
 }
+function ldBitCampos(b) {
+  const p = [];
+  if (b.refiere) p.push(`<div class="ld-bit-c"><span class="ld-bit-k ld-bit-k--ref">Refiere</span><div class="ld-bit-tx">${esc(b.refiere)}</div></div>`);
+  if (b.compromiso) p.push(`<div class="ld-bit-c"><span class="ld-bit-k ld-bit-k--comp">Compromiso</span><div class="ld-bit-tx">${esc(b.compromiso)}</div></div>`);
+  if (!b.refiere && !b.compromiso && b.texto) p.push(`<div class="ld-bit-c"><span class="ld-bit-k">Nota</span><div class="ld-bit-tx">${esc(b.texto)}</div></div>`);
+  return `<div class="ld-bit-cs">${p.join('')}</div>`;
+}
 function ldBitItemHtml(b) {
   return `<div class="ld-bit-it" data-id="${esc(b.id)}">
       <div class="ld-bit-meta"><b>${esc(b.autor || 'Panel')}</b><span>${ldBitFecha(b.fecha)}${b.editado ? ' · editada' : ''}</span>
         ${b.propia ? `<button type="button" class="ld-bit-edit" data-id="${esc(b.id)}">Editar</button>` : ''}</div>
-      <div class="ld-bit-tx">${esc(b.texto)}</div>
+      ${ldBitCampos(b)}
     </div>`;
+}
+/* Los dos campos del formulario (agregar y editar usan el mismo) */
+function ldBitFormCampos(mes) {
+  return `<label class="ld-bit-l"><span class="ld-bit-k ld-bit-k--ref">Refiere</span>
+        <textarea class="input ta ld-bit-ta ld-bit-ref" rows="2" maxlength="2000" placeholder="¿A quién o qué refirió en ${esc(ldMesLargo(mes))}?"></textarea></label>
+      <label class="ld-bit-l"><span class="ld-bit-k ld-bit-k--comp">Compromiso</span>
+        <textarea class="input ta ld-bit-ta ld-bit-comp" rows="2" maxlength="2000" placeholder="¿Qué se comprometió a hacer?"></textarea></label>
+      <p class="small muted ld-bit-ayuda">Los dos son opcionales, pero escribe al menos uno.</p>`;
+}
+function ldBitLeer(caja) {
+  const ref = (caja.querySelector('.ld-bit-ref') || {}).value || '', comp = (caja.querySelector('.ld-bit-comp') || {}).value || '';
+  const refiere = ref.trim(), compromiso = comp.trim();
+  const texto = [refiere ? 'Refiere: ' + refiere : '', compromiso ? 'Compromiso: ' + compromiso : ''].filter(Boolean).join('\n');
+  return { refiere, compromiso, texto };
 }
 function ldBitHtml(mes) {
   if (!LD_BIT.ok) return '';
@@ -3507,7 +3536,7 @@ function ldBitHtml(mes) {
       <div class="ld-bit-h"><b>Bitácora de ${esc(ldMesLargo(mes))}</b>
         <button type="button" class="btn btn-quiet ld-bit-add">+ Agregar bitácora</button></div>
       <div class="ld-bit-form" hidden>
-        <textarea class="input ta ld-bit-ta" rows="3" maxlength="2000" placeholder="¿Qué se trabajó con este líder en ${esc(ldMesLargo(mes))}?"></textarea>
+        ${ldBitFormCampos(mes)}
         <div class="ld-bit-acts"><button type="button" class="btn btn-ghost ld-bit-cancel">Cancelar</button><button type="button" class="btn btn-primary ld-bit-save">Guardar</button></div>
       </div>
       <div class="ld-bit-list">${lista.length ? lista.map(ldBitItemHtml).join('') : `<p class="small muted ld-bit-vacia">Todavía no hay bitácoras de este mes.</p>`}</div>
@@ -3522,18 +3551,21 @@ function ldBitRepintar(det, m) {
 }
 function ldBitBind(det, m) {
   const caja = det.querySelector('.ld-bit'); if (!caja) return;
-  const form = caja.querySelector('.ld-bit-form'), ta = caja.querySelector('.ld-bit-ta'), add = caja.querySelector('.ld-bit-add');
-  if (add) add.onclick = () => { form.hidden = false; add.hidden = true; ta.focus(); };
-  caja.querySelector('.ld-bit-cancel').onclick = () => { form.hidden = true; if (add) add.hidden = false; ta.value = ''; };
+  const form = caja.querySelector('.ld-bit-form'), add = caja.querySelector('.ld-bit-add');
+  if (add) add.onclick = () => { form.hidden = false; add.hidden = true; form.querySelector('.ld-bit-ref').focus(); };
+  caja.querySelector('.ld-bit-cancel').onclick = () => { form.hidden = true; if (add) add.hidden = false; form.querySelectorAll('textarea').forEach(t => t.value = ''); };
   const save = caja.querySelector('.ld-bit-save');
   save.onclick = async () => {
-    const texto = ta.value.trim();
-    if (!texto) { toast('Escribe la bitácora', 'err'); return ta.focus(); }
+    if (save.disabled) return;
+    const v = ldBitLeer(form);
+    if (!v.refiere && !v.compromiso) { toast('Escribe Refiere o Compromiso', 'err'); return form.querySelector('.ld-bit-ref').focus(); }
     saving(save, true);
     try {
-      const r = await api('priv.liderBitacoraGuardar', {}, 'POST', { ...ldAuth(), codigo: LD_BIT.cod, mes: m.mes, texto });
+      const r = await api('priv.liderBitacoraGuardar', {}, 'POST', { ...ldAuth(), codigo: LD_BIT.cod, mes: m.mes, ...v });
       if (!r || !r.ok) { saving(save, false); return toast((r && r.msg) || 'No se pudo guardar', 'err'); }
+      if (r.item && r.item.refiere === undefined) Object.assign(r.item, { refiere: '', compromiso: '' });   // CORE anterior: queda como Nota
       LD_BIT.items.unshift(r.item);
+      LD_BITINF = null;                            // el informe se vuelve a pedir
       toast('Bitácora guardada', 'ok');
       ldBitRepintar(det, m);
     } catch (e) { saving(save, false); toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : 'Error de conexión', 'err'); }
@@ -3543,27 +3575,331 @@ function ldBitBind(det, m) {
 function ldBitEditar(det, m, id) {
   const b = LD_BIT.items.find(x => x.id === id); if (!b) return;
   const it = det.querySelector(`.ld-bit-it[data-id="${cssq(id)}"]`); if (!it) return;
-  const tx = it.querySelector('.ld-bit-tx');
-  tx.outerHTML = `<div class="ld-bit-ed"><textarea class="input ta ld-bit-ta" rows="3" maxlength="2000"></textarea>
+  const cs = it.querySelector('.ld-bit-cs');
+  cs.outerHTML = `<div class="ld-bit-ed">${ldBitFormCampos(m.mes)}
       <div class="ld-bit-acts"><button type="button" class="btn btn-ghost ld-bit-cancel">Cancelar</button><button type="button" class="btn btn-primary ld-bit-save">Guardar cambios</button></div></div>`;
-  const ed = it.querySelector('.ld-bit-ed'), ta = ed.querySelector('textarea'), save = ed.querySelector('.ld-bit-save');
-  ta.value = b.texto; ta.focus();
+  const ed = it.querySelector('.ld-bit-ed'), save = ed.querySelector('.ld-bit-save');
+  const tRef = ed.querySelector('.ld-bit-ref'), tComp = ed.querySelector('.ld-bit-comp');
+  const legado = !b.refiere && !b.compromiso && b.texto;      // la de antes: su texto entra en Refiere
+  tRef.value = legado ? b.texto : (b.refiere || ''); tComp.value = b.compromiso || ''; tRef.focus();
   const eb = it.querySelector('.ld-bit-edit'); if (eb) eb.hidden = true;
   ed.querySelector('.ld-bit-cancel').onclick = () => ldBitRepintar(det, m);
   save.onclick = async () => {
-    const texto = ta.value.trim();
-    if (!texto) { toast('Escribe la bitácora', 'err'); return ta.focus(); }
-    if (texto === b.texto) return ldBitRepintar(det, m);
+    if (save.disabled) return;
+    const v = ldBitLeer(ed);
+    if (!v.refiere && !v.compromiso) { toast('Escribe Refiere o Compromiso', 'err'); return tRef.focus(); }
+    if (!legado && v.refiere === (b.refiere || '') && v.compromiso === (b.compromiso || '')) return ldBitRepintar(det, m);
     saving(save, true);
     try {
-      const r = await api('priv.liderBitacoraEditar', {}, 'POST', { ...ldAuth(), id, texto });
+      const r = await api('priv.liderBitacoraEditar', {}, 'POST', { ...ldAuth(), id, ...v });
       if (!r || !r.ok) { saving(save, false); return toast((r && r.msg) || 'No se pudo guardar', 'err'); }
       const i = LD_BIT.items.findIndex(x => x.id === id);
-      if (i >= 0) LD_BIT.items[i] = r.item;
+      if (i >= 0) LD_BIT.items[i] = Object.assign({ refiere: '', compromiso: '' }, r.item);
+      LD_BITINF = null;
       toast('Bitácora actualizada', 'ok');
       ldBitRepintar(det, m);
     } catch (e) { saving(save, false); toast('Error de conexión', 'err'); }
   };
+}
+
+
+/* ============================================================
+   INFORME DE BITÁCORAS POR MESES  (03/11/2026)
+   ------------------------------------------------------------
+   Líderes → botón "Bitácoras". Se eligen uno o varios meses (los que
+   tienen bitácoras) y, si se quiere, uno o varios líderes; sale en PDF o
+   en Excel con Refiere y Compromiso, fecha y autor, por mes y por líder.
+   · UN viaje: priv.liderBitacoraInforme trae el resumen por mes y, si todo
+     cabe (< 90 KB), todas las filas → el archivo se arma sin volver al
+     servidor. Si el CORE dice que no cabe (grande), se piden solo los meses
+     elegidos (un viaje).
+   · Nunca viaja un archivo: el PDF (jsPDF local, js/vendor) y el Excel
+     (xlsx local) los arma el navegador. Las librerías se cargan solo al
+     descargar, una vez por sesión.
+   · La hoja se pinta al instante; los meses llegan de fondo. Lo traído se
+     guarda en memoria (LD_BITINF) hasta que se guarde o edite una bitácora.
+   · Permiso de invitado: lid.bitInforme (candado "Sin exportar" lo apaga).
+   ============================================================ */
+let LD_BITINF = null;            // { data, t } en memoria de la sesión
+let LD_USER = null;              // quien abrió Líderes (para el pie del PDF)
+const LDI_LIB = {};              // promesas de las librerías
+
+function ldiCargarScript(clave, src, listo) {
+  if (listo()) return Promise.resolve();
+  if (LDI_LIB[clave]) return LDI_LIB[clave];
+  LDI_LIB[clave] = new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src;
+    s.onload = () => listo() ? res() : rej(new Error('lib'));
+    s.onerror = () => { delete LDI_LIB[clave]; rej(new Error('lib')); };
+    document.head.appendChild(s);
+  });
+  return LDI_LIB[clave];
+}
+function ldiCargarPdf() {
+  return ldiCargarScript('jspdf', 'js/vendor/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF))
+    .then(() => ldiCargarScript('autotable', 'js/vendor/jspdf.plugin.autotable.min.js', () => !!(window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable)))
+    .then(() => window.jspdf.jsPDF);
+}
+
+/* Filas compactas del CORE → objetos */
+function ldiFilas(d) {
+  const ix = {}; (d.cols || []).forEach((c, i) => ix[c] = i);
+  return (d.filas || []).map(f => ({
+    cod: String(f[ix.codigo]), mes: f[ix.mes], fecha: f[ix.fecha] || '', autor: f[ix.autor] || '',
+    refiere: f[ix.refiere] || '', compromiso: f[ix.compromiso] || '', nota: f[ix.nota] || '', editado: f[ix.editado] || ''
+  }));
+}
+function ldiMesesTxt(meses) {
+  const ms = meses.slice().sort();
+  if (!ms.length) return '';
+  if (ms.length === 1) return ldMesLargo(ms[0]);
+  return ms.map(m => ldMesLargo(m)).join(', ');
+}
+function ldiArchivo(meses, ext) {
+  const ms = meses.slice().sort();
+  const rango = ms.length === 1 ? ms[0] : ms[0] + '_a_' + ms[ms.length - 1];
+  return `Informe_bitacoras_lideres_${rango}.${ext}`;
+}
+function ldiHora(f) { const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : String(f || ''); }
+
+/* ---------- Hoja de opciones ---------- */
+async function ldBitInforme() {
+  const t0 = performance.now();
+  const st = { meses: new Set(), cods: new Set(), q: '' };   // cods vacío = todos
+  openSheet(`<div class="grip"></div>
+    <h2 class="h2" style="margin-bottom:4px;">Informe de bitácoras</h2>
+    <p class="muted small">Elige los meses y, si quieres, los líderes. El informe trae Refiere y Compromiso con su fecha y autor, por mes y por líder.</p>
+    <h3 class="ldx-h3">Meses</h3>
+    <div class="ldi-tools"><span class="small muted" id="ldi-mn"></span>
+      <div class="ldx-tbtns"><button class="bd-btn" id="ldi-mall" disabled>Todos</button><button class="bd-btn" id="ldi-mnone" disabled>Ninguno</button></div></div>
+    <div class="ldi-meses" id="ldi-meses">${loadingBox('Buscando meses con bitácoras…')}</div>
+    <h3 class="ldx-h3">Líderes</h3>
+    <div class="ldi-tools"><span class="small muted" id="ldi-ln">Todos los líderes de los meses elegidos</span>
+      <div class="ldx-tbtns"><button class="bd-btn" id="ldi-lall">Todos</button></div></div>
+    <input class="input ldi-q" id="ldi-q" placeholder="Buscar líder por nombre o código…" autocomplete="off" />
+    <div class="col-pick ldi-lids" id="ldi-lids"></div>
+    <p class="small muted ldi-res" id="ldi-res"></p>
+    <div class="ldx-acts">
+      <button class="btn btn-primary" id="ldi-pdf" disabled>${I.pdf} PDF</button>
+      <button class="btn btn-ghost" id="ldi-xls" disabled>${I.download} Excel</button>
+    </div>`);
+  const fuera = () => !$('#ldi-meses');
+  let d = LD_BITINF && LD_BITINF.data;
+  if (!d) {
+    try {
+      d = await api('priv.liderBitacoraInforme', ldAuth(), 'GET', null, { silent: true });
+    } catch (e) {
+      if (fuera()) return;
+      const caja = $('#ldi-meses'); if (caja) caja.innerHTML = `<p class="small muted">${String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para el informe de bitácoras.' : 'No se pudo traer la lista de meses. Revisa la conexión e intenta de nuevo.'}</p>`;
+      return;
+    }
+    if (!d || !d.ok) { if (!fuera()) $('#ldi-meses').innerHTML = `<p class="small muted">${esc((d && d.msg) || 'No se pudo traer la lista de meses.')}</p>`; return; }
+    LD_BITINF = { data: d, t: Date.now() };
+  }
+  if (fuera()) return;
+  const meses = d.meses || [];
+  if (!meses.length) { $('#ldi-meses').innerHTML = `<p class="small muted">Todavía no hay bitácoras en ningún mes.</p>`; return; }
+  st.meses.add(meses[0].mes);                            // por defecto, el mes más reciente
+  /* Los nombres salen de la lista de Líderes que ya está en memoria (el CORE
+     no lee LIDERES para esto); si no está, el que mande el CORE o el código. */
+  const nombre = c => { const l = ldFind(c); return (l && l.nombre) || (d.lideres && d.lideres[c]) || ('Líder #' + c); };
+  $('#ldi-meses').innerHTML = meses.map(m => `<button type="button" class="ldi-mes" data-m="${esc(m.mes)}" aria-pressed="false">
+      <b>${esc(ldMesLargo(m.mes))}</b><span>${m.n.toLocaleString('es-CO')} bitácora${m.n === 1 ? '' : 's'} · ${m.lideres.toLocaleString('es-CO')} líder${m.lideres === 1 ? '' : 'es'}</span></button>`).join('');
+  $('#ldi-mall').disabled = false; $('#ldi-mnone').disabled = false;
+
+  /* Líderes que tienen bitácora en los meses elegidos */
+  const lidsDe = () => {
+    const s = new Set();
+    meses.forEach(m => { if (st.meses.has(m.mes)) (m.cods || []).forEach(c => s.add(String(c))); });
+    return [...s].sort((a, b) => Number(a) - Number(b));
+  };
+  const resumen = () => {
+    const lids = lidsDe();
+    [...st.cods].forEach(c => { if (lids.indexOf(c) < 0) st.cods.delete(c); });
+    let n = 0;
+    if (d.completo) {
+      n = ldiFilas(d).filter(f => st.meses.has(f.mes) && (!st.cods.size || st.cods.has(f.cod))).length;
+    } else meses.forEach(m => { if (st.meses.has(m.mes)) n += m.n; });
+    const nl = st.cods.size || lids.length;
+    $('#ldi-mn').textContent = st.meses.size ? `${st.meses.size} mes${st.meses.size === 1 ? '' : 'es'} elegido${st.meses.size === 1 ? '' : 's'}` : 'Elige al menos un mes';
+    $('#ldi-ln').textContent = st.cods.size ? `${st.cods.size} líder${st.cods.size === 1 ? '' : 'es'} elegido${st.cods.size === 1 ? '' : 's'}` : 'Todos los líderes de los meses elegidos';
+    $('#ldi-res').textContent = st.meses.size ? `${(d.completo || !st.cods.size) ? n.toLocaleString('es-CO') : 'Las'} bitácora${n === 1 ? '' : 's'} de ${nl.toLocaleString('es-CO')} líder${nl === 1 ? '' : 'es'}.` : '';
+    $('#ldi-pdf').disabled = $('#ldi-xls').disabled = !st.meses.size;
+    $$('#ldi-meses .ldi-mes').forEach(b => { const on = st.meses.has(b.dataset.m); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+  };
+  const pintarLids = () => {
+    const q = ldNorm(st.q), lids = lidsDe().filter(c => !q || ldNorm(nombre(c) + ' ' + c).indexOf(q) >= 0);
+    $('#ldi-lids').innerHTML = lids.length
+      ? lids.map(c => `<label class="col-opt"><input type="checkbox" data-c="${esc(c)}" ${st.cods.has(c) ? 'checked' : ''}/> <span><em class="ldx-tag">#${esc(c)}</em> ${esc(nombre(c))}</span></label>`).join('')
+      : `<p class="small muted" style="margin:0;">${st.meses.size ? 'Ningún líder coincide con la búsqueda.' : 'Elige un mes para ver sus líderes.'}</p>`;
+    $$('#ldi-lids input').forEach(i => i.onchange = () => { i.checked ? st.cods.add(i.dataset.c) : st.cods.delete(i.dataset.c); resumen(); });
+  };
+  $$('#ldi-meses .ldi-mes').forEach(b => b.onclick = () => { const m = b.dataset.m; st.meses.has(m) ? st.meses.delete(m) : st.meses.add(m); pintarLids(); resumen(); });
+  $('#ldi-mall').onclick = () => { meses.forEach(m => st.meses.add(m.mes)); pintarLids(); resumen(); };
+  $('#ldi-mnone').onclick = () => { st.meses.clear(); pintarLids(); resumen(); };
+  $('#ldi-lall').onclick = () => { st.cods.clear(); pintarLids(); resumen(); };
+  $('#ldi-q').oninput = e => { st.q = e.target.value; pintarLids(); };
+  pintarLids(); resumen();
+  try { RED.pantalla && RED.pantalla('lid.bitInforme', performance.now() - t0); } catch (e) {}
+
+  const bajar = async (tipo, btn) => {
+    if (btn.disabled || !st.meses.size) return;
+    const t1 = performance.now();
+    saving(btn, true);
+    try {
+      let dd = d;
+      if (!d.completo) {
+        dd = await api('priv.liderBitacoraInforme', { ...ldAuth(), meses: [...st.meses].join(','), codigos: [...st.cods].join(',') }, 'GET', null, { silent: true });
+        if (!dd || !dd.ok) { saving(btn, false); return toast((dd && dd.msg) || 'No se pudo armar el informe', 'err'); }
+      }
+      const filas = ldiFilas(dd).filter(f => st.meses.has(f.mes) && (!st.cods.size || st.cods.has(f.cod)));
+      if (!filas.length) { saving(btn, false); return toast('No hay bitácoras con esa selección', 'err'); }
+      const sel = { meses: [...st.meses].sort(), filas, nombre, filtroLid: st.cods.size };
+      if (tipo === 'pdf') await ldiPdf(sel); else await ldiExcel(sel);
+      saving(btn, false);
+      try { RED.pantalla && RED.pantalla('lid.bitInforme.' + tipo, performance.now() - t1); } catch (e) {}
+      toast(tipo === 'pdf' ? 'PDF descargado' : 'Excel descargado', 'ok');
+    } catch (e) {
+      saving(btn, false);
+      toast(String(e && e.message) === 'lib' ? 'No se pudo cargar el generador del archivo. Revisa la conexión.' : 'No se pudo armar el informe', 'err');
+    }
+  };
+  $('#ldi-pdf').onclick = () => bajar('pdf', $('#ldi-pdf'));
+  $('#ldi-xls').onclick = () => bajar('excel', $('#ldi-xls'));
+}
+
+/* Orden del informe: mes ↑, líder (código ↑), fecha ↑ */
+function ldiOrden(filas) {
+  return filas.slice().sort((a, b) => a.mes < b.mes ? -1 : a.mes > b.mes ? 1 : (Number(a.cod) - Number(b.cod)) || (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+}
+
+/* ---------- Excel ---------- */
+async function ldiExcel(sel) {
+  const X = await cargarXlsx();
+  const filas = ldiOrden(sel.filas);
+  const cab = ['Mes', 'Código', 'Líder', 'Fecha y hora', 'Autor', 'Refiere', 'Compromiso', 'Nota (formato anterior)', 'Editada'];
+  const aoa = [cab].concat(filas.map(f => [ldMesLargo(f.mes), Number(f.cod) || f.cod, sel.nombre(f.cod), ldiHora(f.fecha), f.autor, f.refiere, f.compromiso, f.nota, f.editado ? ldiHora(f.editado) : '']));
+  const ws = X.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 30 }, { wch: 17 }, { wch: 22 }, { wch: 60 }, { wch: 60 }, { wch: 40 }, { wch: 17 }];
+  ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: cab.length - 1 } }) };
+  /* Resumen: por mes y por líder */
+  const res = [['Mes', 'Código', 'Líder', 'Bitácoras', 'Con Refiere', 'Con Compromiso']], agg = {};
+  filas.forEach(f => { const k = f.mes + '|' + f.cod; const a = agg[k] || (agg[k] = { mes: f.mes, cod: f.cod, n: 0, r: 0, c: 0 }); a.n++; if (f.refiere) a.r++; if (f.compromiso) a.c++; });
+  Object.keys(agg).forEach(k => { const a = agg[k]; res.push([ldMesLargo(a.mes), Number(a.cod) || a.cod, sel.nombre(a.cod), a.n, a.r, a.c]); });
+  res.push(['Total', '', '', filas.length, filas.filter(f => f.refiere).length, filas.filter(f => f.compromiso).length]);
+  const wr = X.utils.aoa_to_sheet(res);
+  wr['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 30 }, { wch: 11 }, { wch: 12 }, { wch: 15 }];
+  const wb = X.utils.book_new();
+  X.utils.book_append_sheet(wb, wr, 'Resumen');
+  X.utils.book_append_sheet(wb, ws, 'Bitácoras');
+  X.writeFile(wb, ldiArchivo(sel.meses, 'xlsx'));
+}
+
+/* ---------- PDF ---------- */
+/* Las fuentes estándar del PDF solo traen latín-1: se cambia lo demás */
+function ldiPdfTx(s) {
+  return String(s == null ? '' : s)
+    .replace(/[‘’‚′]/g, "'").replace(/[“”„″]/g, '"')
+    .replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[•●▪]/g, '-')
+    .replace(/ /g, ' ').replace(/[^\n\r\t\x20-\x7E¡-ÿ]/g, '');
+}
+function ldiHex(c) { const m = String(c || '').match(/^#?([0-9a-f]{6})$/i); const v = m ? m[1] : '007BFF'; return [0, 2, 4].map(i => parseInt(v.slice(i, i + 2), 16)); }
+async function ldiLogo() {
+  try {
+    const r = await fetch('img/logo.png'); if (!r.ok) return null;
+    const b = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(b); });
+  } catch (e) { return null; }
+}
+async function ldiPdf(sel) {
+  const [jsPDF, logo] = await Promise.all([ldiCargarPdf(), ldiLogo()]);
+  const M = window.MARCA || {};
+  const azul = ldiHex(M.COLOR), azul7 = ldiHex(M.COLOR_700 || '#0056B3');
+  const tinta = [33, 37, 41], gris = [108, 117, 125], linea = [222, 226, 230], suave = [244, 247, 251];
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), mg = 14;
+  const filas = ldiOrden(sel.filas);
+  const lids = [...new Set(filas.map(f => f.cod))];
+  const autores = [...new Set(filas.map(f => f.autor).filter(Boolean))];
+  const conRef = filas.filter(f => f.refiere).length, conComp = filas.filter(f => f.compromiso).length;
+  const quien = (LD_USER && (LD_USER.nombre || LD_USER.name)) || '';
+  const ahora = new Date();
+  const hoyTx = `${ahora.getDate()} de ${LD_MESES_TXT[ahora.getMonth()].toLowerCase()} de ${ahora.getFullYear()}, ${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+  /* Encabezado de la primera página */
+  doc.setFillColor(...azul); doc.rect(0, 0, W, 34, 'F');
+  doc.setFillColor(...azul7); doc.rect(0, 34, W, 1.6, 'F');
+  let x0 = mg;
+  if (logo) { try { doc.setFillColor(255, 255, 255); doc.roundedRect(mg, 7, 20, 20, 3, 3, 'F'); doc.addImage(logo, 'PNG', mg + 1.5, 8.5, 17, 17); x0 = mg + 25; } catch (e) {} }
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(17);
+  doc.text('Informe de bitácoras de líderes', x0, 16);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.text(ldiPdfTx(`${M.CANDIDATO || ''}${M.MUNICIPIO ? ' · ' + M.MUNICIPIO : ''}${M.EQUIPO ? ' · ' + M.EQUIPO : ''}`), x0, 22.5);
+  doc.text(ldiPdfTx(ldiMesesTxt(sel.meses)), x0, 28);
+
+  /* Indicadores */
+  let y = 44;
+  const kpis = [[filas.length, 'Bitácoras'], [lids.length, 'Líderes'], [sel.meses.length, sel.meses.length === 1 ? 'Mes' : 'Meses'], [conRef, 'Con Refiere'], [conComp, 'Con Compromiso']];
+  const kw = (W - mg * 2 - 4 * 4) / kpis.length;
+  kpis.forEach((k, i) => {
+    const kx = mg + i * (kw + 4);
+    doc.setFillColor(...suave); doc.setDrawColor(...linea); doc.roundedRect(kx, y, kw, 18, 2.5, 2.5, 'FD');
+    doc.setTextColor(...azul7); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text(Number(k[0]).toLocaleString('es-CO'), kx + kw / 2, y + 9, { align: 'center' });
+    doc.setTextColor(...gris); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text(k[1], kx + kw / 2, y + 14.5, { align: 'center' });
+  });
+  y += 24;
+  doc.setFontSize(8.5); doc.setTextColor(...gris);
+  const nota = `Generado el ${hoyTx}${quien ? ' por ' + quien : ''}. ${sel.filtroLid ? 'Líderes elegidos: ' + lids.length + '.' : 'Todos los líderes con bitácora en los meses elegidos.'}${autores.length ? ' Autores: ' + autores.join(', ') + '.' : ''}`;
+  const notaL = doc.splitTextToSize(ldiPdfTx(nota), W - mg * 2);
+  doc.text(notaL, mg, y); y += notaL.length * 3.8 + 3;
+
+  /* Por mes: banda del mes y una tabla con el líder como fila de grupo */
+  sel.meses.forEach(mes => {
+    const delMes = filas.filter(f => f.mes === mes);
+    if (!delMes.length) return;
+    const lm = [...new Set(delMes.map(f => f.cod))];
+    if (y > H - 50) { doc.addPage(); y = 18; }
+    doc.setFillColor(...azul); doc.roundedRect(mg, y, W - mg * 2, 10, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5);
+    doc.text(ldiPdfTx(ldMesLargo(mes)), mg + 4, y + 6.7);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text(`${delMes.length} bitácora${delMes.length === 1 ? '' : 's'} · ${lm.length} líder${lm.length === 1 ? '' : 'es'}`, W - mg - 4, y + 6.7, { align: 'right' });
+    y += 12;
+    const body = [];
+    lm.forEach(c => {
+      const suyas = delMes.filter(f => f.cod === c);
+      body.push([{ content: ldiPdfTx(`#${c} · ${sel.nombre(c)}`) + `   (${suyas.length} bitácora${suyas.length === 1 ? '' : 's'})`, colSpan: 4, styles: { fillColor: [232, 241, 255], textColor: azul7, fontStyle: 'bold', fontSize: 9.5 } }]);
+      suyas.forEach(f => {
+        const fecha = ldiHora(f.fecha) + (f.editado ? '\n(editada)' : '');
+        if (!f.refiere && !f.compromiso && f.nota) body.push([fecha, ldiPdfTx(f.autor), { content: 'Nota: ' + ldiPdfTx(f.nota), colSpan: 2, styles: { fontStyle: 'italic' } }]);
+        else body.push([fecha, ldiPdfTx(f.autor), ldiPdfTx(f.refiere) || '-', ldiPdfTx(f.compromiso) || '-']);
+      });
+    });
+    doc.autoTable({
+      startY: y, margin: { left: mg, right: mg, top: 18, bottom: 16 },
+      head: [['Fecha', 'Autor', 'Refiere', 'Compromiso']], body,
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 8.6, cellPadding: 2.2, textColor: tinta, lineColor: linea, lineWidth: 0.2, valign: 'top', overflow: 'linebreak' },
+      headStyles: { fillColor: [52, 58, 64], textColor: 255, fontStyle: 'bold', fontSize: 8.6 },
+      columnStyles: { 0: { cellWidth: 24, textColor: gris, fontSize: 8 }, 1: { cellWidth: 28 }, 2: { cellWidth: 65 }, 3: { cellWidth: 'auto' } },
+      rowPageBreak: 'avoid'
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  });
+
+  /* Pie de página en todas las páginas */
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(...linea); doc.line(mg, H - 11, W - mg, H - 11);
+    doc.setFontSize(7.5); doc.setTextColor(...gris); doc.setFont('helvetica', 'normal');
+    doc.text(ldiPdfTx(`Informe de bitácoras · ${M.CANDIDATO || ''} · Uso interno`), mg, H - 6.5);
+    doc.text(`Página ${i} de ${n}`, W - mg, H - 6.5, { align: 'right' });
+  }
+  doc.save(ldiArchivo(sel.meses, 'pdf'));
 }
 
 /* Pide el historial y pinta la gráfica dentro de la ficha ya abierta.
@@ -9523,6 +9859,8 @@ function cfPermVistaToggle(id) {
     if (CF_PERM_OPEN === id) CF_PERM_OPEN = '';
   } else {
     const m = cfPermMadre(v); if (m) cfPermPoner([m]);
+    /* 03/11/2026 · pastillas con defecto: se encienden junto con la vista (se pueden apagar) */
+    cfPermPoner((v.items || []).filter(x => x.defecto).map(x => x.k));
     CF_PERM_OPEN = id;                          // y se abre el nivel 2
   }
   cfPermPintar();

@@ -2496,6 +2496,7 @@ table.asis-t th, table.asis-t td { display: table-cell !important; }
 .ld-bit-h b { font-family: var(--font-display); font-size: .9rem; }
 .ld-bit-h .btn { height: 34px; padding: 0 12px; font-size: 13px; }
 .ld-bit-form, .ld-bit-ed { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.ld-bit-form[hidden], .ld-bit-add[hidden] { display: none; }   /* 03/11 (2): el display:flex le ganaba al atributo hidden */
 .ld-bit-ta { min-height: 84px; height: auto; padding: 10px 12px; resize: vertical; line-height: 1.4; }
 .ld-bit-acts { display: flex; justify-content: flex-end; gap: 8px; }
 .ld-bit-acts .btn { height: 38px; padding: 0 14px; font-size: 13px; }
@@ -2506,6 +2507,26 @@ table.asis-t th, table.asis-t td { display: table-cell !important; }
 .ld-bit-edit { margin-left: auto; background: none; border: none; padding: 2px 4px; color: var(--brand-700); font-weight: 700; font-size: 12px; cursor: pointer; }
 .ld-bit-tx { margin-top: 4px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .ld-bit-vacia { margin: 0; }
+/* 03/11/2026 (2) · Refiere y Compromiso */
+.ld-bit-l { display: flex; flex-direction: column; gap: 4px; }
+.ld-bit-l .ld-bit-ta { min-height: 64px; }
+.ld-bit-ayuda { margin: -2px 0 0; }
+.ld-bit-cs { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.ld-bit-c .ld-bit-tx { margin-top: 2px; }
+.ld-bit-k { display: inline-block; align-self: flex-start; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--muted); }
+.ld-bit-k--ref { background: #E8F1FF; color: var(--brand-700); }
+.ld-bit-k--comp { background: #E9F7EF; color: #1E7B45; }
+/* Informe de bitácoras por meses */
+.ldi-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ldi-meses { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.ldi-mes { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; transition: border-color .15s, background .15s; }
+.ldi-mes b { font-family: var(--font-display); font-size: 14px; }
+.ldi-mes span { font-size: 12px; color: var(--muted); }
+.ldi-mes.on { border-color: var(--brand); background: #E8F1FF; }
+.ldi-mes.on b { color: var(--brand-700); }
+.ldi-q { margin-bottom: 8px; }
+.ldi-lids { max-height: 240px; overflow: auto; }
+.ldi-res { margin: 10px 0 0; font-weight: 600; }
 
 /* ---- Pastillas de municipio en el modal de Referidos ---- */
 /* ---- Botón ACTIVADO / NO ACTIVADO de la tarjeta de líder (01/09/2026) ----
