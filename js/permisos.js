@@ -56,6 +56,8 @@
     ['#ld-add', 'lid.agregar'],
     ['#ld-memoria', 'lid.mem.ver'],
     ['#ld-exp', 'lid.exportar'],
+    ['.ld-bit-add', 'lid.bitacora'],        /* 03/11/2026 · bitácora del mes */
+    ['.ld-bit-edit', 'lid.bitacora'],
     ['#ld-body [data-a="ver"]', 'lid.ficha'],
     ['#ld-body [data-a="editar"]', 'lid.editar'],
     ['#ld-body [data-a="wa"]', 'lid.wa'],

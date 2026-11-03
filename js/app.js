@@ -585,11 +585,15 @@ function vivoDisparar(rev) {
 }
 
 async function vivoCorrer(rev) {
-  if (!VIVO.load || VIVO.corriendo) return;
-  if (document.hidden) { VIVO.pend = rev; return; }    // en segundo plano no se toca la pantalla
+  if (!VIVO.load) return;
+  /* 03/11/2026 · una señal que llega mientras otra se aplica ya no se pierde:
+     queda pendiente y corre al terminar la que va en curso. */
+  if (VIVO.corriendo || document.hidden) { VIVO.pend = rev; return; }    // en segundo plano no se toca la pantalla
   VIVO.corriendo = true;
-  try { await VIVO.load(rev); } catch (e) { /* en silencio: no se molesta al usuario */ }
+  const load = VIVO.load;
+  try { await load(rev); } catch (e) { /* en silencio: no se molesta al usuario */ }
   finally { VIVO.corriendo = false; }
+  if (VIVO.load === load && VIVO.pend && !document.hidden) { const p = VIVO.pend; VIVO.pend = null; vivoCorrer(p); }
 }
 
 /* Al volver de segundo plano: lo pendiente, y de paso una comprobación. */
@@ -1396,8 +1400,17 @@ async function viewBaseDatos(user) {
    tarjeta con priv.bdCard (~200 bytes) y se reemplaza en sitio con
    bdUpsertCard, que ya existía. rev.prev cubre el caso de que le hayan
    cambiado el documento a alguien: se quita la tarjeta vieja. */
+/* 03/11/2026 · Las rutas del líder en la app pública (alta, edición y marca
+   de un referido) traían en rev.doc la cédula del LÍDER: aquí se pedía su
+   tarjeta, no cambiaba nada y el referido nuevo nunca entraba a la lista.
+   El CORE 2026.11.03.1 ya manda la del referido. Si llega una de esas
+   señales y la tarjeta no movió nada (CORE anterior), se trae la lista. */
+const VIVO_BD_DEL_LIDER = /^(referido-|marca$|lider-asignado|alta-publica|edicion-publica)/;
+let VIVO_MED = [];   // traza EN VIVO de esta pestaña: {accion, via, ms}
 async function vivoBd(rev) {
+  const t0 = performance.now();
   const doc = rev && rev.doc ? normDocJs(rev.doc) : '';
+  const medir = via => { VIVO_MED.push({ accion: (rev && rev.accion) || '', via, ms: Math.round(performance.now() - t0) }); if (VIVO_MED.length > 30) VIVO_MED.shift(); };
 
   if (doc) {
     const r = await api('priv.bdCard', { caller: BD_ME, documento: doc }, 'GET', null, SILENCIO);
@@ -1416,21 +1429,26 @@ async function vivoBd(rev) {
       }
     } else if (i >= 0) { BD_ALL.splice(i, 1); cambio = true; }
 
-    RAP.tocar('priv.baseDatos', 'bd', rev.ts);   // la caché de sesión ya tiene este cambio
-    if (!cambio) return;                 // sonó por algo que no altera la tarjeta
-    if (prev || !r.card) bdApplyFilter(); // se quitó una tarjeta: hay que repintar la lista
-    bdBuildIntChips();
-    vivoCerrarHoja(rev);
-    return;
+    if (cambio || !VIVO_BD_DEL_LIDER.test(String(rev.accion || ''))) {
+      RAP.tocar('priv.baseDatos', 'bd', rev.ts);   // la caché de sesión ya tiene este cambio
+      if (!cambio) { medir('tarjeta-sin-cambio'); return; }   // sonó por algo que no altera la tarjeta
+      if (prev || !r.card) bdApplyFilter(); // se quitó una tarjeta: hay que repintar la lista
+      bdBuildIntChips();
+      vivoCerrarHoja(rev);
+      medir('tarjeta');
+      return;
+    }
+    /* sigue abajo: la señal del líder no trajo al referido → lista */
   }
 
   /* No sabemos qué cambió: recarga completa (rara) */
   const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME }, RAP.params()), 'GET', null, SILENCIO);
   if (!r || r.ok === false) return;
   RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
-  if (!vivoCambio(JSON.stringify(r.items))) return;
+  if (!vivoCambio(JSON.stringify(r.items))) { medir('lista-sin-cambio'); return; }
   BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
   bdBuildIntChips(); bdApplyFilter(); vivoCerrarHoja(rev);
+  medir('lista');
 }
 
 /* ---- AJUSTES 16/07 · filtro por LÍDER ----
@@ -3400,12 +3418,12 @@ function ldGrafHtml(serie) {
         title="${esc(ldMesLargo(m.mes))}: ${m.vacio ? 'sin informe' : pct + '% de trabajo'}">
       <span class="ld-gb-v">${m.vacio ? '' : pct + '%'}</span>
       <span class="ld-gb-col"><span class="ld-gb-in ${ldTrabColor(pct)}" style="height:${alto}%"></span></span>
-      <span class="ld-gb-m">${esc(ldMesCorto(m.mes))}</span>
+      <span class="ld-gb-m">${esc(ldMesCorto(m.mes))}${ldBitDe(m.mes).length ? '<i class="ld-gb-bit" aria-label="con bitácora"></i>' : ''}</span>
     </button>`;
   }).join('');
   const vivo = serie.some(m => m.envivo);
   return `<div class="ld-graf">
-      <div class="ld-graf-h"><b>Trabajo mes a mes · ${esc(String(serie[0].mes).slice(0, 4))}</b><span class="small muted">Toca un mes</span></div>
+      <div class="ld-graf-h"><b>Trabajo mes a mes · ${esc(String(serie[0].mes).slice(0, 4))}</b><span class="small muted">Toca un mes${LD_BIT.ok ? ' para ver su detalle y su bitácora' : ''}</span></div>
       <div class="ld-graf-b">${barras}</div>
       ${vivo ? `<p class="small muted ld-graf-p">El último mes va en vivo: se cierra el 1º del mes siguiente.</p>` : ''}
       <div id="ld-graf-det"></div>
@@ -3422,11 +3440,12 @@ function ldGrafBind(serie) {
     if (abierto || !m) { det.innerHTML = ''; return; }
     b.classList.add('on');
     det.innerHTML = ldMesDetHtml(m);
+    ldBitBind(det, m);
   });
 }
 
 function ldMesDetHtml(m) {
-  if (m.vacio) return `<div class="ld-graf-det"><b>${esc(ldMesLargo(m.mes))}</b><p class="small muted" style="margin:4px 0 0;">Ese mes no quedó informe guardado.</p></div>`;
+  if (m.vacio) return `<div class="ld-graf-det"><b>${esc(ldMesLargo(m.mes))}</b><p class="small muted" style="margin:4px 0 0;">Ese mes no quedó informe guardado.</p>${ldBitHtml(m.mes)}</div>`;
   const filas = ldMesDesglose(m).map(d =>
     `<div class="ld-dg-row"><span class="ld-dg-k">${esc(d.label)} <b>${d.pct}%</b></span><span class="ld-dg-n">${d.n.toLocaleString('es-CO')}</span></div>`).join('');
   const noFid = Number(m.noFid || 0);
@@ -3435,7 +3454,98 @@ function ldMesDetHtml(m) {
       <div class="small muted" style="margin:2px 0 6px;">${Number(m.ref || 0).toLocaleString('es-CO')} ref. · ${Number(m.trab || 0).toLocaleString('es-CO')} trabajados · <b class="${ldTrabColor(Number(m.pct || 0))}">${Number(m.pct || 0)}%</b></div>
       ${filas || `<p class="small muted" style="margin:0;">Ese mes no se registró ninguna intención.</p>`}
       ${noFid ? `<div class="ld-dg-row ld-dg-nofid"><span class="ld-dg-k">No fidelizados</span><span class="ld-dg-n">${noFid.toLocaleString('es-CO')}</span></div>` : ''}
+      ${ldBitHtml(m.mes)}
     </div>`;
+}
+
+/* ============================================================
+   BITÁCORA DEL LÍDER POR MES  (03/11/2026)
+   ------------------------------------------------------------
+   Llega en el MISMO viaje que la gráfica (priv.liderMeses con bit=1).
+   Agregar: cualquier usuario con la pastilla lid.bitacora (DEV y ADMIN
+   siempre). Editar: solo quien la escribió (propia=true, lo decide el
+   CORE). No se borra. Al guardar se parcha la lista en memoria: no se
+   vuelve a pedir nada.
+   ============================================================ */
+let LD_BIT = { cod: '', ok: false, items: [] };
+function ldBitDe(mes) { return LD_BIT.ok ? LD_BIT.items.filter(b => b.mes === mes) : []; }
+function ldBitFecha(f) {
+  const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return esc(f || '');
+  const hh = parseInt(m[4], 10), ap = hh < 12 ? 'a. m.' : 'p. m.', h12 = ((hh + 11) % 12) + 1;
+  return `${parseInt(m[3], 10)} ${(LD_MESES_TXT[parseInt(m[2], 10) - 1] || '').slice(0, 3).toLowerCase()} ${m[1]} · ${h12}:${m[5]} ${ap}`;
+}
+function ldBitItemHtml(b) {
+  return `<div class="ld-bit-it" data-id="${esc(b.id)}">
+      <div class="ld-bit-meta"><b>${esc(b.autor || 'Panel')}</b><span>${ldBitFecha(b.fecha)}${b.editado ? ' · editada' : ''}</span>
+        ${b.propia ? `<button type="button" class="ld-bit-edit" data-id="${esc(b.id)}">Editar</button>` : ''}</div>
+      <div class="ld-bit-tx">${esc(b.texto)}</div>
+    </div>`;
+}
+function ldBitHtml(mes) {
+  if (!LD_BIT.ok) return '';
+  const lista = ldBitDe(mes);
+  return `<div class="ld-bit" data-mes="${esc(mes)}">
+      <div class="ld-bit-h"><b>Bitácora de ${esc(ldMesLargo(mes))}</b>
+        <button type="button" class="btn btn-quiet ld-bit-add">+ Agregar bitácora</button></div>
+      <div class="ld-bit-form" hidden>
+        <textarea class="input ta ld-bit-ta" rows="3" maxlength="2000" placeholder="¿Qué se trabajó con este líder en ${esc(ldMesLargo(mes))}?"></textarea>
+        <div class="ld-bit-acts"><button type="button" class="btn btn-ghost ld-bit-cancel">Cancelar</button><button type="button" class="btn btn-primary ld-bit-save">Guardar</button></div>
+      </div>
+      <div class="ld-bit-list">${lista.length ? lista.map(ldBitItemHtml).join('') : `<p class="small muted ld-bit-vacia">Todavía no hay bitácoras de este mes.</p>`}</div>
+    </div>`;
+}
+function ldBitRepintar(det, m) {
+  const caja = det.querySelector('.ld-bit'); if (!caja) return;
+  const nuevo = h(ldBitHtml(m.mes)); caja.replaceWith(nuevo);
+  ldBitBind(det, m);
+  const b = $(`.ld-gb[data-mes="${cssq(m.mes)}"] .ld-gb-m`);   // el punto de la barra
+  if (b && ldBitDe(m.mes).length && !b.querySelector('.ld-gb-bit')) b.insertAdjacentHTML('beforeend', '<i class="ld-gb-bit" aria-label="con bitácora"></i>');
+}
+function ldBitBind(det, m) {
+  const caja = det.querySelector('.ld-bit'); if (!caja) return;
+  const form = caja.querySelector('.ld-bit-form'), ta = caja.querySelector('.ld-bit-ta'), add = caja.querySelector('.ld-bit-add');
+  if (add) add.onclick = () => { form.hidden = false; add.hidden = true; ta.focus(); };
+  caja.querySelector('.ld-bit-cancel').onclick = () => { form.hidden = true; if (add) add.hidden = false; ta.value = ''; };
+  const save = caja.querySelector('.ld-bit-save');
+  save.onclick = async () => {
+    const texto = ta.value.trim();
+    if (!texto) { toast('Escribe la bitácora', 'err'); return ta.focus(); }
+    saving(save, true);
+    try {
+      const r = await api('priv.liderBitacoraGuardar', {}, 'POST', { ...ldAuth(), codigo: LD_BIT.cod, mes: m.mes, texto });
+      if (!r || !r.ok) { saving(save, false); return toast((r && r.msg) || 'No se pudo guardar', 'err'); }
+      LD_BIT.items.unshift(r.item);
+      toast('Bitácora guardada', 'ok');
+      ldBitRepintar(det, m);
+    } catch (e) { saving(save, false); toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : 'Error de conexión', 'err'); }
+  };
+  caja.querySelectorAll('.ld-bit-edit').forEach(bt => bt.onclick = () => ldBitEditar(det, m, bt.dataset.id));
+}
+function ldBitEditar(det, m, id) {
+  const b = LD_BIT.items.find(x => x.id === id); if (!b) return;
+  const it = det.querySelector(`.ld-bit-it[data-id="${cssq(id)}"]`); if (!it) return;
+  const tx = it.querySelector('.ld-bit-tx');
+  tx.outerHTML = `<div class="ld-bit-ed"><textarea class="input ta ld-bit-ta" rows="3" maxlength="2000"></textarea>
+      <div class="ld-bit-acts"><button type="button" class="btn btn-ghost ld-bit-cancel">Cancelar</button><button type="button" class="btn btn-primary ld-bit-save">Guardar cambios</button></div></div>`;
+  const ed = it.querySelector('.ld-bit-ed'), ta = ed.querySelector('textarea'), save = ed.querySelector('.ld-bit-save');
+  ta.value = b.texto; ta.focus();
+  const eb = it.querySelector('.ld-bit-edit'); if (eb) eb.hidden = true;
+  ed.querySelector('.ld-bit-cancel').onclick = () => ldBitRepintar(det, m);
+  save.onclick = async () => {
+    const texto = ta.value.trim();
+    if (!texto) { toast('Escribe la bitácora', 'err'); return ta.focus(); }
+    if (texto === b.texto) return ldBitRepintar(det, m);
+    saving(save, true);
+    try {
+      const r = await api('priv.liderBitacoraEditar', {}, 'POST', { ...ldAuth(), id, texto });
+      if (!r || !r.ok) { saving(save, false); return toast((r && r.msg) || 'No se pudo guardar', 'err'); }
+      const i = LD_BIT.items.findIndex(x => x.id === id);
+      if (i >= 0) LD_BIT.items[i] = r.item;
+      toast('Bitácora actualizada', 'ok');
+      ldBitRepintar(det, m);
+    } catch (e) { saving(save, false); toast('Error de conexión', 'err'); }
+  };
 }
 
 /* Pide el historial y pinta la gráfica dentro de la ficha ya abierta.
@@ -3443,9 +3553,15 @@ function ldMesDetHtml(m) {
 async function ldGrafCargar(cod, c) {
   const caja = $('#ld-graf-box'); if (!caja) return;
   let meses = [];
+  LD_BIT = { cod: String(cod), ok: false, items: [] };
   try {
-    const r = await api('priv.liderMeses', { codigo: cod, ...ldAuth() });
-    if (r && r.ok) meses = r.meses || [];
+    /* 03/11/2026 · bit=1: las bitácoras del líder llegan en el mismo viaje.
+       Con un CORE anterior no vienen y la bitácora simplemente no se muestra. */
+    const r = await api('priv.liderMeses', { codigo: cod, bit: '1', ...ldAuth() });
+    if (r && r.ok) {
+      meses = r.meses || [];
+      if (Array.isArray(r.bitacoras)) LD_BIT = { cod: String(r.codigo || cod), ok: true, items: r.bitacoras };
+    }
   } catch (e) { /* sin historial se ve solo el mes en vivo */ }
   if (!$('#ld-graf-box')) return;                  // cerraron la ficha mientras tanto
   const serie = ldSerieAnual(meses, ldMesEnVivo(c));

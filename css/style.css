@@ -2487,6 +2487,25 @@ table.asis-t th, table.asis-t td { display: table-cell !important; }
 .ld-graf-p { margin: 8px 0 0; }
 .ld-graf-det { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ld-graf-det > b { font-family: var(--font-display); font-size: .95rem; }
+.ld-gb-m { position: relative; }
+.ld-gb-bit { position: absolute; top: -2px; right: -7px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+
+/* ---- Bitácora del líder por mes (03/11/2026) ---- */
+.ld-bit { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.ld-bit-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ld-bit-h b { font-family: var(--font-display); font-size: .9rem; }
+.ld-bit-h .btn { height: 34px; padding: 0 12px; font-size: 13px; }
+.ld-bit-form, .ld-bit-ed { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.ld-bit-ta { min-height: 84px; height: auto; padding: 10px 12px; resize: vertical; line-height: 1.4; }
+.ld-bit-acts { display: flex; justify-content: flex-end; gap: 8px; }
+.ld-bit-acts .btn { height: 38px; padding: 0 14px; font-size: 13px; }
+.ld-bit-list { display: flex; flex-direction: column; gap: 8px; }
+.ld-bit-it { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; }
+.ld-bit-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); }
+.ld-bit-meta b { color: var(--ink); font-size: 12.5px; }
+.ld-bit-edit { margin-left: auto; background: none; border: none; padding: 2px 4px; color: var(--brand-700); font-weight: 700; font-size: 12px; cursor: pointer; }
+.ld-bit-tx { margin-top: 4px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.ld-bit-vacia { margin: 0; }
 
 /* ---- Pastillas de municipio en el modal de Referidos ---- */
 /* ---- Botón ACTIVADO / NO ACTIVADO de la tarjeta de líder (01/09/2026) ----

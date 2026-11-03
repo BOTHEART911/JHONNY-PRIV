@@ -200,3 +200,7 @@ html.oscuro .rf-mun.bd-otro{ background:#393D48; color:#DEABAB; }
 html.oscuro .rf-mun.rf-mun-all{ background:#333D4C; color:#BBD6FF; }
 html.oscuro .ld-gb-col{ background:#333A45; }
 html.oscuro .ld-gb:hover, html.oscuro .ld-gb.on{ background:#333D4C; }
+
+/* 03/11/2026 · bitácora del líder por mes */
+html.oscuro .ld-bit-it{ background:#262C36; border-color:#333A45; }
+html.oscuro .ld-bit-edit{ color:#7DB6FF; }
