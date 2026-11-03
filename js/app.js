@@ -573,9 +573,27 @@ function vivoEscuchar() {
       /* 12/10/2026 · la señal pública ya no trae la cédula tocada: solo la
          hora. Cuando cambia, el detalle (doc/prev) se pide con sesión a
          priv.rev, que es quien decide si basta traer una tarjeta. */
-      if (rev.ts > VIVO.ts) vivoSondear(true);   // true: también en segundo plano (vivoCorrer lo deja pendiente)
+      if (rev.ts > VIVO.ts) (VIVO.canal === 'bd' ? vivoBdDirecto() : vivoSondear(true));   // true: también en segundo plano (vivoCorrer lo deja pendiente)
     }, () => { if (VIVO.canal === canal) vivoRespaldo(); /* reglas cerradas: entra el sondeo de respaldo */ });
   }).catch(() => { if (VIVO.canal === canal) vivoRespaldo(); });
+}
+
+/* 03/11/2026 · Base de datos: el sello y la tarjeta en UN viaje (priv.bdVivo).
+   Antes eran dos seguidos a Apps Script (priv.rev y luego priv.bdCard).
+   Con un CORE que aún no la tiene, se sigue por el camino de siempre. */
+let _bdVivoNo = false;
+async function vivoBdDirecto() {
+  if (_bdVivoNo) return vivoSondear(true);
+  const canal = VIVO.canal;
+  try {
+    const r = await api('priv.bdVivo', { caller: VIVO.caller }, 'GET', null, SILENCIO);
+    if (VIVO.canal !== canal) return;                  // cambió de vista mientras iba en vuelo
+    const rev = r && r.rev;
+    if (!rev || !(rev.ts > VIVO.ts)) return;
+    vivoDisparar(Object.assign({}, rev, { __pre: { card: r.card || null, borrado: !!r.borrado } }));
+  } catch (e) {
+    if (/no reconocida/i.test(String(e && e.message))) { _bdVivoNo = true; vivoSondear(true); }
+  }
 }
 
 function vivoDisparar(rev) {
@@ -1413,7 +1431,7 @@ async function vivoBd(rev) {
   const medir = via => { VIVO_MED.push({ accion: (rev && rev.accion) || '', via, ms: Math.round(performance.now() - t0) }); if (VIVO_MED.length > 30) VIVO_MED.shift(); };
 
   if (doc) {
-    const r = await api('priv.bdCard', { caller: BD_ME, documento: doc }, 'GET', null, SILENCIO);
+    const r = rev.__pre || await api('priv.bdCard', { caller: BD_ME, documento: doc }, 'GET', null, SILENCIO);
     const prev = rev.prev ? normDocJs(rev.prev) : '';
     let cambio = false;
 

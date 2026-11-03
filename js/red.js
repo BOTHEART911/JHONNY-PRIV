@@ -32,7 +32,7 @@
   /* Lecturas puras (misma lista que NUC_LECTURAS del CORE). Lo que no esté
      aquí se trata como escritura: lleva rid y nunca se corta. */
   var LECTURAS = {};
-  ('app.marca ping priv.rev priv.bdCard pub.rev pub.inicio pub.residencias pub.servicios pub.validarDoc pub.config ' +
+  ('app.marca ping priv.rev priv.bdCard priv.bdVivo pub.rev pub.inicio pub.residencias pub.servicios pub.validarDoc pub.config ' +
    'pub.esLider pub.esProfesional pub.servExcel pub.liderReferidos pub.liderBalanceVer pub.liderBalancePdf pub.lideresLista ' +
    'com.todo com.catalogo com.mio com.clientes com.clientesExcel com.politicas com.social com.categorias com.porCategoria ' +
    'priv.cfgTodo priv.miPerfil priv.baseDatos priv.bdExcel priv.bdPdf priv.persona priv.validarDoc priv.lideres ' +
