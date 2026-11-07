@@ -126,6 +126,8 @@
     ['#fm-body [data-a="reusar"]', 'fm.reusar'],
     ['#fm-body [data-a="enviar"]', 'fm.enviar'],
     ['#fm-body [data-a="detalles"]', 'fm.detalles'],
+    ['#fmd-xls', 'fm.excel'],
+    ['#fmd-sel', 'fm.agregarBd'],
     /* ---- Notificaciones ---- */
     ['#nt-add', 'nt.crear'],
     ['#nt-body [data-a="editar"]', 'nt.editar'],

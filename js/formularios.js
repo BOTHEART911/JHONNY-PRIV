@@ -109,7 +109,7 @@
         if (!$('#fm-body')) return;
         (fb.apps && fb.apps.length) ? fb.app() : fb.initializeApp(VOTO_FBCFG);
         const ref = fb.database().ref('meta/form_n');
-        const on = s => { FM_N = s.val() || {}; fmPintarConteos(); };
+        const on = s => { FM_N = s.val() || {}; fmPintarConteos(); fmdVivo(); };
         ref.on('value', on, () => {});
         FM_FB = () => { try { ref.off('value', on); } catch (e) {} };
         const previo = window.__votoTeardown;
@@ -175,8 +175,8 @@
     const btn = (a, t, cls) => `<button class="bd-btn ${cls || ''}" data-a="${a}">${t}</button>`;
     let acts = '';
     if (it.estado === 'CREADO') acts = btn('editar', 'Editar') + btn('previa', 'Vista previa') + btn('encender', `${ICO_POWER} Encender`, 'fm-btn-on') + btn('eliminar', 'Eliminar', 'bd-btn-danger');
-    else if (it.estado === 'ENCENDIDO') acts = btn('enviar', `${I.wa} Enviar`, 'fm-btn-wa') + btn('previa', 'Vista previa') + btn('apagar', `${ICO_POWER} Apagar`, 'fm-btn-off');
-    else acts = btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`);
+    else if (it.estado === 'ENCENDIDO') acts = btn('enviar', `${I.wa} Enviar`, 'fm-btn-wa') + btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('apagar', `${ICO_POWER} Apagar`, 'fm-btn-off');
+    else acts = btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`);
     return `<article class="fm-card fm-${it.estado.toLowerCase()}" data-id="${esc(it.id)}">
       <div class="fm-img">${it.imagen ? `<img src="${esc(it.imagen)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : ICO_FORM}${fmEstadoHtml(it)}</div>
       <div class="fm-in">
@@ -205,6 +205,7 @@
     if (a === 'eliminar') return fmEliminar(it, btn);
     if (a === 'reusar') return fmReusar(it);
     if (a === 'enviar') return fmEnviar(it);
+    if (a === 'detalles') return fmDetalles(it);
   }
 
   /* Escritura común: botón ocupado desde el primer toque, un solo envío */
@@ -675,6 +676,253 @@
     closeLayer(); fmUpsert(r.item);
     toast(ED.id ? 'Cambios guardados' : 'Formulario creado. Revísalo y enciéndelo cuando esté listo.', 'ok');
     ED = null;
+  }
+
+  /* ============================================================= DETALLES
+     07/11/2026 · Los inscritos de un formulario, como Referidos:
+       · Todos / En la base / No están (con su líder si ya está en PRINCIPAL).
+       · Buscador y Excel locales (el Excel se arma en el navegador).
+       · "Agregar a la base": selección múltiple de los que NO están →
+         un líder → priv.formAgregarBd (un viaje, MUNICIPIO = SIN CONSULTAR).
+         Tras guardar se parchan las filas en memoria (no se recarga todo).
+       · EN VIVO: si cambia /meta/form_n del formulario abierto, se trae de
+         fondo y se repinta. Carga única por sesión (rapCargar). */
+  let FMD = null;   // { it, items, form, filtro, sel:Set|null, mostrados }
+  const FMD_TANDA = 60;
+
+  function fmdClave(id) { return 'priv.formRegistros:' + id; }
+  async function fmDetalles(it) {
+    FMD = { it, id: it.id, n: fmN(it), items: null, form: null, filtro: 'todos', sel: null, mostrados: 0 };
+    openSheet(`<div class="grip"></div>
+      <div class="det-head"><h2 class="h2">Detalles · ${esc(it.nombre)}</h2><span class="ld-refs" id="fmd-tot">…</span></div>
+      <div class="fmd-kpis" id="fmd-kpis"></div>
+      <section class="asis-sec">
+        <div class="asis-head">
+          <div class="bd-search"><input class="input" id="fmd-q" placeholder="Buscar por documento, nombre, WhatsApp, residencia, líder o código…" autocomplete="off" /></div>
+          <button class="btn btn-ghost asis-xls" id="fmd-xls" hidden>${I.download} Excel</button>
+        </div>
+        <div class="bd-chips" id="fmd-chips">
+          ${[['todos', 'Todos'], ['base', 'En la base'], ['fuera', 'No están']].map(([k, t]) => `<button class="bd-chip ${k === 'todos' ? 'active' : ''}" data-f="${k}">${t}<i></i></button>`).join('')}
+        </div>
+        <div class="rf-acts" id="fmd-acts"></div>
+        <div id="fmd-body">${Array(4).fill('<div class="fmd-card fm-skel"><i></i><i></i></div>').join('')}</div>
+      </section>
+      <div class="stack" style="margin-top:12px;"><button class="btn btn-quiet btn-block" data-close>Cerrar</button></div>`, 'sheet-xl fmd-sheet');
+    let t; $('#fmd-q').oninput = () => { clearTimeout(t); t = setTimeout(fmdPintar, 150); };
+    $$('#fmd-chips .bd-chip').forEach(ch => ch.onclick = () => {
+      $$('#fmd-chips .bd-chip').forEach(x => x.classList.toggle('active', x === ch));
+      FMD.filtro = ch.dataset.f; fmdPintar();
+    });
+    $('#fmd-xls').onclick = fmdExcel;
+    $('#fmd-body').addEventListener('click', fmdClic);
+    const yo = FMD;
+    try {
+      await rapCargar('priv.formRegistros', Object.assign(fmAuth(), { id: it.id }), (r) => {
+        if (FMD !== yo || !$('#fmd-body')) return;
+        if (!r || r.ok === false) { if (!yo.items) $('#fmd-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
+        yo.items = r.items || []; yo.form = r.form || {}; fmdPintar();
+      }, fmdClave(it.id));
+    } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = `<p class="muted center">${/no reconocida/i.test(String(e && e.message)) ? 'Falta desplegar la versión nueva del CORE.' : 'Error de conexión.'}</p>`; }
+  }
+
+  /* Firebase avisó un cambio de conteo: si el formulario abierto cambió, se trae de fondo */
+  let fmdEnVuelo = false;
+  async function fmdVivo() {
+    if (!FMD || !FMD.items || !$('#fmd-body') || !(FMD.id in FM_N)) return;
+    const n = Number(FM_N[FMD.id]) || 0;
+    if (n === FMD.n || fmdEnVuelo) return;
+    FMD.n = n; fmdEnVuelo = true;
+    const yo = FMD;
+    try {
+      const r = await api('priv.formRegistros', Object.assign(fmAuth(), { id: yo.id }, RAP.params()), 'GET', null, SILENCIO);
+      if (!r || r.ok === false || FMD !== yo) return;
+      RAP.guardar(fmdClave(yo.id), r, r.__rapCrudo || r);
+      yo.items = r.items || []; yo.form = r.form || yo.form; fmdPintar(true);
+    } catch (e) {} finally { fmdEnVuelo = false; }
+  }
+
+  function fmdTexto(x) { return [x.documento, x.nombre, x.whatsapp, x.residencia, x.codigo, x.bd && x.bd.lider, x.bd && x.bd.ref].join(' ').toLowerCase(); }
+  function fmdFiltrados() {
+    const q = (($('#fmd-q') || {}).value || '').trim().toLowerCase();
+    return (FMD.items || []).filter(x => (FMD.filtro === 'todos' || (FMD.filtro === 'base' ? !!x.bd : !x.bd)) && (!q || fmdTexto(x).includes(q)));
+  }
+  function fmdPintar(suave) {
+    const body = $('#fmd-body'); if (!body || !FMD || !FMD.items) return;
+    const all = FMD.items, enBase = all.filter(x => x.bd).length, espera = all.filter(x => x.estado === 'ESPERA').length, asis = all.filter(x => x.asistio).length;
+    $('#fmd-tot').textContent = `${all.length.toLocaleString('es-CO')} inscrito(s)`;
+    $('#fmd-kpis').innerHTML = [['Inscritos', all.length], ['En la base', enBase], ['No están', all.length - enBase], ['En espera', espera], ['Asistieron', asis]]
+      .filter(([k, v]) => v || k === 'Inscritos' || k === 'En la base' || k === 'No están').map(([k, v]) => `<div><b>${v.toLocaleString('es-CO')}</b><span>${k}</span></div>`).join('');
+    const cuenta = { todos: all.length, base: enBase, fuera: all.length - enBase };
+    $$('#fmd-chips .bd-chip').forEach(ch => { ch.querySelector('i').textContent = ` ${cuenta[ch.dataset.f].toLocaleString('es-CO')}`; });
+    $('#fmd-xls').hidden = !all.length;
+    if (FMD.sel) { const fuera = new Set(all.filter(x => !x.bd).map(x => x.documento)); FMD.sel.forEach(d => { if (!fuera.has(d)) FMD.sel.delete(d); }); }
+    fmdActs();
+    const lista = fmdFiltrados();
+    if (!lista.length) {
+      body.innerHTML = `<p class="muted center" style="margin-top:18px;">${all.length ? 'Nadie en este filtro.' : 'Todavía no hay inscritos. Comparte el enlace con "Enviar".'}</p>`;
+      return;
+    }
+    const n = suave ? Math.max(FMD.mostrados, FMD_TANDA) : FMD_TANDA;
+    body.innerHTML = `<div class="fmd-grid">${lista.slice(0, n).map(fmdCard).join('')}</div><div id="fmd-mas"></div>`;
+    FMD.mostrados = Math.min(n, lista.length);
+    fmdMas(lista);
+  }
+  function fmdMas(lista) {
+    const box = $('#fmd-mas'); if (!box) return;
+    const resta = lista.length - FMD.mostrados;
+    box.innerHTML = resta > 0 ? `<button class="btn btn-ghost btn-block" style="margin-top:10px;">Ver más (${resta.toLocaleString('es-CO')})</button>` : '';
+    const b = box.querySelector('button');
+    if (b) b.onclick = () => {
+      const sig = lista.slice(FMD.mostrados, FMD.mostrados + FMD_TANDA);
+      $('#fmd-body .fmd-grid').insertAdjacentHTML('beforeend', sig.map(fmdCard).join(''));
+      FMD.mostrados += sig.length; fmdMas(lista);
+    };
+  }
+  function fmdCard(x) {
+    const sel = FMD.sel, puede = sel && !x.bd, on = puede && sel.has(x.documento);
+    const est = x.asistio ? '<span class="fmd-est fmd-asis">Asistió</span>' : x.estado === 'ESPERA' ? '<span class="fmd-est fmd-esp">En espera</span>' : '';
+    return `<article class="fmd-card ${x.bd ? 'fmd-enbd' : ''} ${on ? 'rf-on' : ''} ${sel && !puede ? 'fmd-nosel' : ''}" data-doc="${esc(x.documento)}" data-cod="${esc(x.codigo)}">
+      ${puede ? `<input type="checkbox" class="rf-ck" ${on ? 'checked' : ''} aria-label="Seleccionar" />` : ''}
+      ${avatarHtml(x.nombre, '')}
+      <div class="rf-c-main">
+        <b class="rf-c-nom">${esc(x.nombre || '—')}</b>
+        <span class="rf-c-sub">CC ${esc(x.documento)} · ${esc(x.whatsapp || '—')}</span>
+        <span class="rf-c-res">${esc(x.residencia || '')}${x.fecha ? ` · ${esc(fmFechaCorta(x.fecha))}` : ''}</span>
+        ${x.bd ? `<span class="fmd-lider">${I.users} ${esc(x.bd.lider || ('Líder #' + x.bd.ref))}${x.bd.ref ? ` · #${esc(x.bd.ref)}` : ''}</span>` : '<span class="fmd-fuera">No está en la base</span>'}
+        <div class="fmd-resp" hidden></div>
+      </div>
+      <div class="rf-c-side">${est}<span class="fmd-cod">${esc(x.codigo)}</span>
+        ${!sel && x.whatsapp ? `<button type="button" class="rf-wa" data-wa="57${esc(x.whatsapp)}" title="WhatsApp">${I.wa}</button>` : ''}</div>
+    </article>`;
+  }
+  /* Respuestas del formulario, en el orden de los campos congelados */
+  function fmdRespHtml(x) {
+    const campos = (FMD.form && FMD.form.campos) || [], r = x.r || {};
+    const filas = campos.filter(c => r[c.id] != null && r[c.id] !== '').map(c => {
+      const v = r[c.id];
+      let t;
+      if (v && typeof v === 'object' && !Array.isArray(v) && v.fid) t = `<a href="https://drive.google.com/file/d/${encodeURIComponent(v.fid)}/view" target="_blank" rel="noopener">${c.tipo === 'imagen' ? 'Ver foto' : 'Ver archivo'}</a>`;
+      else if (Array.isArray(v)) t = esc(v.join(', '));
+      else if (c.tipo === 'fecha') t = esc(fmFechaCorta(v));
+      else t = esc(String(v));
+      return `<div><span>${esc(c.etiqueta)}</span><b>${t}</b></div>`;
+    });
+    return filas.length ? filas.join('') : '<div><span>Sin respuestas adicionales</span></div>';
+  }
+  function fmdClic(ev) {
+    const wa = ev.target.closest('[data-wa]');
+    if (wa) { ev.stopPropagation(); return typeof ldWaOpen === 'function' ? ldWaOpen(wa.dataset.wa, '') : window.open('https://wa.me/' + wa.dataset.wa, '_blank'); }
+    if (ev.target.closest('a')) return;
+    const card = ev.target.closest('.fmd-card[data-doc]'); if (!card) return;
+    const x = (FMD.items || []).find(i => i.codigo === card.dataset.cod); if (!x) return;
+    if (FMD.sel) {
+      if (x.bd) return;
+      const d = x.documento;
+      if (FMD.sel.has(d)) FMD.sel.delete(d); else FMD.sel.add(d);
+      const on = FMD.sel.has(d);
+      card.classList.toggle('rf-on', on); const ck = card.querySelector('.rf-ck'); if (ck) ck.checked = on;
+      return fmdActs();
+    }
+    const box = card.querySelector('.fmd-resp');
+    if (box.hidden) box.innerHTML = fmdRespHtml(x);
+    box.hidden = !box.hidden; card.classList.toggle('fmd-abierta', !box.hidden);
+  }
+
+  /* --------------------------------------------- agregar a la base */
+  function fmdActs() {
+    const box = $('#fmd-acts'); if (!box || !FMD.items) return;
+    const fuera = FMD.items.filter(x => !x.bd);
+    const puede = typeof permOk !== 'function' || permOk('fm.agregarBd');
+    if (!fuera.length || !puede) { box.innerHTML = ''; return; }
+    if (!FMD.sel) { box.innerHTML = `<button class="btn btn-ghost" id="fmd-sel">${I.users} Agregar a la base y asignar líder</button>`; }
+    else {
+      const vis = fmdFiltrados().filter(x => !x.bd), n = FMD.sel.size;
+      const todos = vis.length && vis.every(x => FMD.sel.has(x.documento));
+      box.innerHTML = `<button class="btn btn-primary" id="fmd-asig" ${n ? '' : 'disabled'}>Agregar seleccionado(s)${n ? ` (${n.toLocaleString('es-CO')})` : ''}</button>
+        <button class="btn btn-ghost" id="fmd-todos">${todos ? 'Ninguno' : 'Todos los que no están'}</button>
+        <button class="btn btn-quiet" id="fmd-can">Cancelar</button>`;
+    }
+    const s = $('#fmd-sel'); if (s) s.onclick = () => { FMD.sel = new Set(); if (FMD.filtro !== 'fuera') { FMD.filtro = 'fuera'; $$('#fmd-chips .bd-chip').forEach(x => x.classList.toggle('active', x.dataset.f === 'fuera')); } fmdPintar(); };
+    const c = $('#fmd-can'); if (c) c.onclick = () => { FMD.sel = null; fmdPintar(true); };
+    const t = $('#fmd-todos'); if (t) t.onclick = () => {
+      const vis = fmdFiltrados().filter(x => !x.bd);
+      const todos = vis.every(x => FMD.sel.has(x.documento));
+      vis.forEach(x => todos ? FMD.sel.delete(x.documento) : FMD.sel.add(x.documento));
+      fmdPintar(true);
+    };
+    const a = $('#fmd-asig'); if (a) a.onclick = fmdAgregar;
+  }
+  async function fmdLideres() {
+    if (typeof LD_ALL !== 'undefined' && LD_ALL.length) return LD_ALL;
+    let lista = [];
+    await rapCargar('priv.lideres', { caller: FM_ME }, r => { if (r && r.items) lista = r.items; });
+    return lista;
+  }
+  async function fmdAgregar() {
+    if (!FMD.sel || !FMD.sel.size) return toast('Toca las personas que quieres agregar');
+    const yo = FMD, docs = Array.from(yo.sel);
+    if (docs.length > 300) return toast('Máximo 300 por vez', 'err');
+    const b0 = $('#fmd-asig'); saving(b0, true);
+    let lideres = [];
+    try { lideres = await fmdLideres(); } catch (e) {}
+    if (b0 && b0.isConnected) saving(b0, false);
+    if (FMD !== yo) return;
+    const label = l => `#${l.codigo} · ${l.nombre}`;
+    /* Hoja propia encima del modal (no cierra Detalles) */
+    const ov = h(`<div class="fmd-ov"><div class="fmd-dlg">
+      <h2 class="h2">Agregar a la base</h2>
+      <p class="muted small" style="margin:-2px 0 10px;">${docs.length.toLocaleString('es-CO')} persona(s) entran a la Base de datos con <b>MUNICIPIO = SIN CONSULTAR</b> y el líder que elijas.</p>
+      <label class="field"><span>Líder</span>${comboboxHtml('fmd-lid', 'Escribe para buscar líder…')}</label>
+      <button class="btn btn-primary btn-block" id="fmd-ok" style="margin-top:14px;">Agregar ${docs.length.toLocaleString('es-CO')}</button>
+      <button class="btn btn-quiet btn-block" id="fmd-no" style="margin-top:8px;">Volver</button></div></div>`);
+    $('.fmd-sheet').appendChild(ov);
+    bindCombobox('fmd-lid', lideres.map(label));
+    const inp = $('#fmd-lid'); if (inp) inp.focus();
+    const cerrar = () => ov.remove();
+    $('#fmd-no').onclick = cerrar;
+    ov.onclick = e => { if (e.target === ov) cerrar(); };
+    $('#fmd-ok').onclick = async () => {
+      const m = /^#(\d+)/.exec(String((inp && inp.value) || '').trim());
+      if (!m) return toast('Elige un líder de la lista', 'err');
+      const r = await fmEscribir($('#fmd-ok'), 'priv.formAgregarBd', { id: yo.id, documentos: docs, referencia: m[1] });
+      if (!r) return;
+      cerrar();
+      /* Parche en memoria: los agregados (y los que ya estaban) quedan con su líder */
+      const lid = r.lider || { codigo: m[1], nombre: '' };
+      const ag = new Set((r.agregados || []).map(String));
+      (yo.items || []).forEach(x => { if (ag.has(x.documento)) x.bd = { ref: lid.codigo, lider: lid.nombre }; });
+      const ya = new Set((r.yaEstaban || []).map(String));
+      (yo.items || []).forEach(x => { if (ya.has(x.documento) && !x.bd) x.bd = { ref: '', lider: 'Ya estaba en la base' }; });
+      RAP.olvidar(fmdClave(yo.id)); RAP.olvidar('priv.baseDatos'); RAP.olvidar('priv.liderReferidos:' + lid.codigo);
+      yo.sel = null; yo.filtro = 'todos';
+      $$('#fmd-chips .bd-chip').forEach(x => x.classList.toggle('active', x.dataset.f === 'todos'));
+      if (FMD === yo) fmdPintar(true);
+      toast(`${Number(r.n || 0).toLocaleString('es-CO')} agregado(s) a la base${ya.size ? ` · ${ya.size} ya estaban` : ''}`, 'ok');
+    };
+  }
+
+  /* ----------------------------------------------------- Excel local */
+  async function fmdExcel() {
+    const lista = fmdFiltrados();
+    if (!lista.length) return toast('No hay registros en el filtro actual', 'err');
+    const b = $('#fmd-xls'); saving(b, true);
+    try {
+      const X = await cargarXlsx();
+      const campos = (FMD.form && FMD.form.campos) || [];
+      const cab = ['CÓDIGO', 'FECHA', 'DOCUMENTO', 'NOMBRE', 'WHATSAPP', 'RESIDENCIA', 'ESTADO', 'ASISTIÓ', 'EN LA BASE', 'LÍDER'].concat(campos.map(c => c.etiqueta.toUpperCase()));
+      const aoa = [cab].concat(lista.map(x => {
+        const r = x.r || {};
+        return [x.codigo, x.fecha, x.documento, x.nombre, x.whatsapp, x.residencia, x.estado, x.asistio || '', x.bd ? 'SÍ' : 'NO', x.bd ? `${x.bd.lider || ''}${x.bd.ref ? ' (#' + x.bd.ref + ')' : ''}` : '']
+          .concat(campos.map(c => { const v = r[c.id]; if (v == null) return ''; if (Array.isArray(v)) return v.join(', '); if (typeof v === 'object') return v.fid ? 'https://drive.google.com/file/d/' + v.fid + '/view' : ''; return v; }));
+      }));
+      const ws = X.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = cab.map((c, i) => ({ wch: Math.min(40, Math.max(10, c.length + 2, i === 3 ? 28 : 0)) }));
+      const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'INSCRITOS');
+      const nom = String(FMD.it.nombre || 'formulario').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_').slice(0, 40);
+      X.writeFile(wb, `Inscritos_${nom}.xlsx`);
+      toast(`${lista.length.toLocaleString('es-CO')} registro(s) exportado(s)`, 'ok');
+    } catch (e) { toast('No se pudo generar el Excel', 'err'); }
+    finally { if (b.isConnected) saving(b, false); }
   }
 
   /* ========================================================= VISTA PREVIA */
