@@ -72,7 +72,12 @@
        (favicon, apple-touch-icon y splash) y en manifest.json —
        eso hay que cambiarlo aparte, ver el checklist. */
     APP_ICON:   'https://botheart911.github.io/IMAGENES-JHONNY/marca/logo.png',
-    APP_BANNER: 'https://botheart911.github.io/IMAGENES-JHONNY/marca/banner.png'
+    APP_BANNER: 'https://botheart911.github.io/IMAGENES-JHONNY/marca/banner.png',
+
+    /* 07/11/2026 · Web pública de inscripciones (repo INSCRIPCIONES-JHONNY).
+       El botón Enviar de Formularios arma el enlace <esto>#<formulario>.
+       Al replicar: la dirección de Pages del repo de la campaña nueva. */
+    INSCRIPCIONES_URL: 'https://botheart911.github.io/INSCRIPCIONES-JHONNY/'
   };
 
 })(typeof self !== 'undefined' ? self : this);

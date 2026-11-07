@@ -116,6 +116,16 @@
     ['#sl-body [data-a="enviar"]', 'sl.wa'],
     ['#sl-edit', 'sl.editar'],
     ['#sl-tz', 'sl.traza'],
+    /* ---- Formularios (07/11/2026) ---- */
+    ['#fm-add', 'fm.crear'],
+    ['#fm-add2', 'fm.crear'],
+    ['#fm-body [data-a="editar"]', 'fm.editar'],
+    ['#fm-body [data-a="eliminar"]', 'fm.eliminar'],
+    ['#fm-body [data-a="encender"]', 'fm.encender'],
+    ['#fm-body [data-a="apagar"]', 'fm.apagar'],
+    ['#fm-body [data-a="reusar"]', 'fm.reusar'],
+    ['#fm-body [data-a="enviar"]', 'fm.enviar'],
+    ['#fm-body [data-a="detalles"]', 'fm.detalles'],
     /* ---- Notificaciones ---- */
     ['#nt-add', 'nt.crear'],
     ['#nt-body [data-a="editar"]', 'nt.editar'],
@@ -150,7 +160,7 @@
   var PERM_RUTAS = {
     bd: 'bd.ver', dashboard: 'dash.ver', simulador: 'sim.ver', votacion: 'voto.ver',
     lideres: 'lid.ver', eventos: 'ev.ver', agenda: 'ag.ver', compromisos: 'cm.ver',
-    solicitudes: 'sl.ver', notificaciones: 'nt.ver', analisis: 'an.ver',
+    solicitudes: 'sl.ver', formularios: 'fm.ver', notificaciones: 'nt.ver', analisis: 'an.ver',
     config: '', mibot: ''
   };
 
@@ -193,7 +203,7 @@
 
   /* Primera ruta a la que sí puede entrar (para rebotarlo con sentido). */
   function permPrimeraRuta() {
-    var orden = ['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'solicitudes', 'notificaciones', 'analisis'];
+    var orden = ['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'solicitudes', 'formularios', 'notificaciones', 'analisis'];
     for (var i = 0; i < orden.length; i++) if (permRuta(orden[i])) return orden[i];
     return '';
   }

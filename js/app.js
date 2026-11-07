@@ -386,6 +386,7 @@ const I = {
   chevR:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
   users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  form:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>',
   repeat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>'
 };
 
@@ -398,13 +399,14 @@ const MENU = [
   { id:'eventos',       icon:'cal',   title:'Eventos',              desc:'Reuniones generales' },
   { id:'agenda',        icon:'cal2',  title:'Agenda',               desc:'Calendario de reuniones' },
   { id:'compromisos',   icon:'check', title:'Compromisos',          desc:'Seguimiento y estados' },
+  { id:'formularios',   icon:'form',  title:'Formularios',          desc:'Inscripciones y jornadas' },   /* 07/11/2026 */
   { id:'notificaciones',icon:'bell',  title:'Notificaciones',       desc:'Publica en "Ponte al día"' },
   { id:'analisis',      icon:'chart', title:'Análisis de Procesos', desc:'Servicios · Ideas · Comercio' },
   { id:'config',        icon:'gear',  title:'Configuración',        desc:'Ajustes de todo el sistema' },
   { id:'mibot',         icon:'bot',   title:'Mi Bot',               desc:'Tu asistente de WhatsApp' }
 ];
 /* Módulos ya construidos (se activan build a build) */
-const READY = new Set(['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'notificaciones', 'analisis', 'config', 'mibot']);
+const READY = new Set(['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'formularios', 'notificaciones', 'analisis', 'config', 'mibot']);
 /* 06/08/2026 · INVITADO: ve solo los módulos cuya pastilla "Ver" tenga
    marcada. Configuración y Mi Bot no están en su catálogo, así que nunca le
    salen. permOk() responde que sí a todo para los demás roles.
@@ -464,6 +466,7 @@ function render() {
     case 'agenda': return viewAgenda(user);
     case 'compromisos': return viewCompromisos(user);
     case 'solicitudes': return viewSolicitudes(user);
+    case 'formularios': return viewFormularios(user);   /* 07/11/2026 · js/formularios.js */
     case 'notificaciones': return viewNotificaciones(user);
     case 'analisis': return viewAnalisis(user);
     case 'config': return viewConfig(user);
@@ -854,6 +857,7 @@ function openModulo(id, user) {
     case 'eventos': return go('eventos');
     case 'agenda': return go('agenda');
     case 'compromisos': return go('compromisos');
+    case 'formularios': return go('formularios');
     case 'notificaciones': return go('notificaciones');
     case 'analisis': return go('analisis');
     case 'config': return go('config');

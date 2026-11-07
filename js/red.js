@@ -48,7 +48,9 @@
    'priv.balances priv.liderBuscarDoc priv.liderAhijados priv.liderActivarInfo priv.iaEstado priv.iaModelos ' +
    'priv.vozEstado priv.vozVoces priv.contactoBuscar ' +
    /* 03/11/2026 · informe de bitácoras (solo lectura) */
-   'priv.liderBitacoraInforme')
+   'priv.liderBitacoraInforme ' +
+   /* 07/11/2026 · Formularios (solo lectura) */
+   'priv.formularios')
     .split(/\s+/).forEach(function (a) { if (a) LECTURAS[a] = true; });
 
   var T_LECTURA = 30000, T_ESCRITURA = 60000;
