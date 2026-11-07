@@ -7306,6 +7306,7 @@ function celebrarNt() {
 
 const AN_TABS = [
   { id: 'servicios', label: 'Servicios' },
+  { id: 'gestiones', label: 'Reseñas' },   /* 07/11/2026 · reseñas de Solicitudes y Gestiones (PERDOMO) */
   { id: 'ideas',     label: 'Ideas' },
   { id: 'comercio',  label: 'Comercio' }
 ];
@@ -7357,7 +7358,7 @@ function anLabelIdea(k) { const h = AN_IDEA_EST.find(e => e.k === k); return h ?
      al Resumen antes de salir al Inicio.
    ============================================================ */
 const AN_TABS_TODAS = [{ id: 'resumen', label: 'Resumen' }].concat(AN_TABS);
-const AN_PERM = { servicios: 'an.serv.ver', ideas: 'an.ideas.ver', comercio: 'an.com.ver' };
+const AN_PERM = { servicios: 'an.serv.ver', gestiones: 'an.serv.ver', ideas: 'an.ideas.ver', comercio: 'an.com.ver' };
 
 function anTabDeHash() {
   const m = /[?&]tab=([a-z]+)/.exec(location.hash || '');
@@ -7378,13 +7379,14 @@ function anRepartir(d) {
   const ok = x => (x && x.ok !== false) ? x : null;
   AN.serv = ok(d && d.serv); AN.ideas = ok(d && d.ideas); AN.com = ok(d && d.com);
   AN.res = ok(d && d.res) || { items: [], resenas: [], global: null };
+  AN.gest = ok(d && d.gest);   /* 07/11/2026 · null si el CORE desplegado aún no la trae */
   AN.listo = true;
 }
 /* Tras una escritura ya aplicada en pantalla: la caché de sesión se queda con
    lo de memoria y se borra la copia local. */
 function anSync() {
   const c = RAP.tomar('priv.analisis');
-  if (c && c.data) { c.data.serv = AN.serv || c.data.serv; c.data.ideas = AN.ideas || c.data.ideas; c.data.com = AN.com || c.data.com; c.data.res = AN.res || c.data.res; }
+  if (c && c.data) { c.data.serv = AN.serv || c.data.serv; c.data.ideas = AN.ideas || c.data.ideas; c.data.com = AN.com || c.data.com; c.data.res = AN.res || c.data.res; c.data.gest = AN.gest || c.data.gest; }
   RAP.tocar('priv.analisis');
 }
 async function anRecargar() {
@@ -7415,7 +7417,7 @@ async function viewAnalisis(user) {
       </div>
       <div id="an-body">${loadingBox('Cargando…')}</div>
     </div>`;
-  app.hidden = false;
+  app.hidden = false; hideSplash();   /* 07/11/2026: al abrir directo en #/analisis el splash se quedaba encima */
   appWide(true, true);
   $('#backbtn').onclick = () => { if (AN && AN.tab !== 'resumen') anIrTab('resumen'); else go('home'); };
   $$('#an-tabs .seg-b').forEach(b => b.onclick = () => anIrTab(b.dataset.tab));
@@ -7454,6 +7456,7 @@ function anPintarTab() {
   if (!body || !AN || !AN.listo) return;
   const tab = AN.tab;
   if (tab === 'resumen') return anResumenPintar();
+  if (tab === 'gestiones') return window.anGestPintar ? anGestPintar() : null;
   const pieza = { servicios: AN.serv, ideas: AN.ideas, comercio: AN.com }[tab];
   if (!pieza) { body.innerHTML = `<p class="center muted" style="padding:26px 0;">No tienes acceso a esta pestaña o no se pudo cargar.</p>`; return; }
   if (tab === 'servicios') return anServPintar();
@@ -7544,12 +7547,14 @@ function anResumenPintar() {
   if (serv) { const n = cuenta(serv, x => x.estado === 'PENDIENTE'); if (n) alertas.push({ n, t: 'servicio(s) en estado Pendiente', tab: 'servicios', fx: 'est:PENDIENTE' }); }
   if (ideas) { const n = cuenta(ideas, x => x.estado === 'PENDIENTE'); if (n) alertas.push({ n, t: 'idea(s) sin leer', tab: 'ideas', fx: 'iest:PENDIENTE' }); }
   if (g) { const n = Math.max(0, (g.resenas || 0) - (g.respondidas || 0)); if (n && com) alertas.push({ n, t: 'reseña(s) de comercios sin responder', tab: 'comercio', fx: '' }); }
+  if (AN.gest && AN.gest.dist && permOk('an.serv.ver')) { const n = (AN.gest.dist[0] || 0) + (AN.gest.dist[1] || 0); if (n) alertas.push({ n, t: 'reseña(s) de 1 o 2 estrellas en Solicitudes y Gestiones', tab: 'gestiones', fx: 'gbajas' }); }
   const atencion = `<section class="an-card an-alertas">
       <div class="an-card-h"><b>Puntos de atención</b></div>
       ${alertas.length ? alertas.map(a => `<button type="button" class="an-alerta an-alerta-go" data-ir="${a.tab}" data-fx="${esc(a.fx)}"><span class="an-al-n">${a.n.toLocaleString('es-CO')}</span><div>${esc(a.t)}</div>${I.chevR || ''}</button>`).join('')
         : `<p class="center muted small" style="padding:12px 0;">Todo al día: no hay nada pendiente.</p>`}
     </section>`;
 
+  if (window.anGestArea && AN.gest && permOk('an.serv.ver')) { const ga = anGestArea(tarjeta); if (ga) areas.splice(1, 0, ga); }
   $('#an-body').innerHTML = `
     <div class="an-areas">${areas.join('') || `<p class="center muted" style="padding:20px 0;">No tienes acceso a ninguna pestaña de análisis.</p>`}</div>
     <div class="an-res-cols">${actividad}${atencion}</div>`;
@@ -7570,6 +7575,8 @@ function anAtajo(tab, fx) {
   } else if (tab === 'ideas') {
     AN.iFiltro = { est: new Set(), cat: new Set(), q: '' };
     if (fx.indexOf('iest:') === 0) AN.iFiltro.est.add(fx.slice(5));
+  } else if (tab === 'gestiones') {
+    AN.gFiltro = { e: new Set(fx === 'gbajas' ? [1, 2] : []), q: '' };
   } else if (tab === 'comercio') {
     AN.cFiltro = { est: 'TODOS', cat: 'TODAS', q: '' };
     if (fx.indexOf('cest:') === 0) AN.cFiltro.est = fx.slice(5);

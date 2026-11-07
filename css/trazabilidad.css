@@ -48,3 +48,33 @@ html.oscuro .tz-e-pend { background: #3a2a0c; color: #F5C26B; }
   .tz-const { margin-left: 0; width: 100%; justify-content: center; }
   .tz-kpis { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ============ ANÁLISIS → RESEÑAS de Solicitudes y Gestiones (07/11/2026) ============ */
+.ag-top { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 12px; margin-bottom: 12px; }
+.ag-prom { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; }
+.ag-prom > b { font: 800 2.6rem/1 var(--font-display); color: var(--ink, inherit); }
+.ag-prom > span { font-size: .8rem; color: var(--muted); }
+.ag-st { display: inline-flex; gap: 2px; }
+.ag-st i { width: 17px; height: 17px; display: inline-flex; }
+.ag-st svg { width: 100%; height: 100%; fill: var(--line); }
+.ag-st i.on svg { fill: #F5B301; }
+.ag-prom .ag-st i { width: 22px; height: 22px; }
+.ag-dist { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.ag-drow, .ag-bar { display: grid; grid-template-columns: 44px 1fr 34px; gap: 10px; align-items: center; border: 0; background: transparent; padding: 3px 6px; border-radius: 10px; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.ag-drow:hover, .ag-bar:hover, .ag-drow.on, .ag-bar.on { background: var(--brand-050); }
+.ag-drow span:first-child { font-weight: 800; font-size: .85rem; }
+.ag-drow em, .ag-bar em { font-style: normal; font-size: .8rem; color: var(--muted); text-align: right; }
+.ag-bt { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ag-bt i { display: block; height: 100%; border-radius: inherit; background: #F5B301; }
+.ag-bars { display: flex; flex-direction: column; gap: 4px; }
+.ag-bar { grid-template-columns: minmax(90px, 1.2fr) 2fr 52px 28px; }
+.ag-bl { font-size: .84rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-bar b { font-size: .8rem; }
+.ag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.ag-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.ag-card p { margin: 0; font-size: .9rem; line-height: 1.4; }
+.ag-baja { border-color: rgba(214,69,69,.45); background: linear-gradient(135deg, rgba(214,69,69,.06), transparent); }
+.ag-r1 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ag-meta { font-size: .78rem; color: var(--muted); }
+.ag-limpiar { border: 0; background: none; color: var(--brand); font-weight: 700; cursor: pointer; padding: 0; }
+@media (max-width: 640px) { .ag-top { grid-template-columns: 1fr; } }
