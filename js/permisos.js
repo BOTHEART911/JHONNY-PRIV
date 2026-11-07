@@ -46,6 +46,7 @@
     ['#det-edit', 'bd.editar'],
     ['#det-inact', 'bd.inactivar'],
     ['#det-elim', 'bd.eliminar'],
+    ['#tz-const', 'bd.constancia'],
     /* ---- Dashboard · Simulador · Votación ---- */
     ['#dash-xls', 'dash.excel'],
     ['#dash-pdf', 'dash.pdf'],

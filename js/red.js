@@ -50,7 +50,7 @@
    /* 03/11/2026 · informe de bitácoras (solo lectura) */
    'priv.liderBitacoraInforme ' +
    /* 07/11/2026 · Formularios (solo lectura) */
-   'priv.formularios priv.formRegistros')
+   'priv.formularios priv.formRegistros priv.trazabilidad')
     .split(/\s+/).forEach(function (a) { if (a) LECTURAS[a] = true; });
 
   var T_LECTURA = 30000, T_ESCRITURA = 60000;

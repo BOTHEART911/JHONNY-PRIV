@@ -1742,7 +1742,7 @@ function bdDocCopiable(card) {
 
 function bdAccion(a, doc) {
   const card = BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc));
-  if (a === 'detalles') return bdDetalles(doc);
+  if (a === 'detalles') return window.tzDetalles ? tzDetalles(doc) : bdDetalles(doc);   // 07/11/2026: Trazabilidad
   if (a === 'editar') return bdEditar(doc);
   if (a === 'consultar') return bdConsultar(doc, card);
   if (a === 'inactivar') return bdInactivar(doc, card);
