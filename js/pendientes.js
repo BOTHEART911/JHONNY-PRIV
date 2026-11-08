@@ -109,7 +109,9 @@
     if (RED.nuevaVista) RED.nuevaVista();
     app.innerHTML = `${backbar('Pendientes por subir')}<div class="pad stack" id="pd-body">${loadingBox('Abriendo tus pendientes…')}</div>`;
     app.hidden = false; hideSplash(); appWide(true, true);
-    $('#backbtn').onclick = () => go('bd');
+    /* Pendientes no es ruta propia: la dirección sigue en #/bd y go('bd') no
+       dispara hashchange (no pasaba nada). Se repinta Base de datos a mano. */
+    $('#backbtn').onclick = () => { if ((location.hash || '').replace(/^#\//, '').split('?')[0] === 'bd') render(); else go('bd'); };
     SR.pintarTira();
     let elegido = '';
     try { elegido = localStorage.getItem(DEST_KEY) || ''; } catch (e) {}
