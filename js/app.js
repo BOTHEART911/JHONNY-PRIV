@@ -146,15 +146,17 @@ let _rapMetaProm = null, _rapMetaT = 0;
 function rapMeta() {
   if (_rapMetaProm && Date.now() - _rapMetaT < 3000) return _rapMetaProm;   // una lectura de /meta sirve 3 s
   _rapMetaT = Date.now();
-  _rapMetaProm = loadFirebase().then(fb => {
+  /* 08/11/2026 · el tope de 4 s cubre TODO (antes no cubría la carga del SDK
+     de Firebase: si se quedaba colgada, la vista esperaba para siempre y el
+     escudo dejaba el botón tocado —p. ej. Detalles— sin responder). */
+  _rapMetaProm = Promise.race([loadFirebase().then(fb => {
     (fb.apps && fb.apps.length) ? fb.app() : fb.initializeApp(VOTO_FBCFG);
-    const leer = fb.database().ref('meta').once('value').then(s => {
+    return fb.database().ref('meta').once('value').then(s => {
       const v = s.val() || {}, o = {};
       Object.keys(v).forEach(k => { if (/_rev$/.test(k)) o[k.replace(/_rev$/, '')] = v[k]; });
       return o;
     });
-    return Promise.race([leer, new Promise((_, no) => setTimeout(() => no(new Error('meta tarde')), 4000))]);
-  });
+  }), new Promise((_, no) => setTimeout(() => no(new Error('meta tarde')), 4000))]);
   _rapMetaProm.catch(() => { _rapMetaProm = null; });
   return _rapMetaProm;
 }
@@ -1749,7 +1751,10 @@ function bdDocCopiable(card) {
 
 function bdAccion(a, doc) {
   const card = BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc));
-  if (a === 'detalles') return window.tzDetalles ? tzDetalles(doc) : bdDetalles(doc);   // 07/11/2026: Trazabilidad
+  /* 08/11/2026 · Detalles es una LECTURA: no se le devuelve la promesa al
+     escudo antidoble (capa 12). Si esa lectura quedaba esperando, el botón
+     se quedaba "ocupado" y los toques siguientes se tragaban sin aviso. */
+  if (a === 'detalles') { (window.tzDetalles ? tzDetalles(doc) : bdDetalles(doc)); return; }   // 07/11/2026: Trazabilidad
   if (a === 'editar') return bdEditar(doc);
   if (a === 'consultar') return bdConsultar(doc, card);
   if (a === 'inactivar') return bdInactivar(doc, card);
