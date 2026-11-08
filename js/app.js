@@ -8293,10 +8293,11 @@ const CF_TABS = [
   { k: 'avanzado', label: 'Avanzado', dev: true }
 ];
 /* 07/11/2026 · INVITADO con acceso a Configuración: solo los apartados que
-   le dieron (pastillas cf.casa / cf.inicio). El CORE además le manda solo
+   le dieron (pastillas cf.casa / cf.emergencia / cf.inicio). El CORE además le manda solo
    esos datos (cfTodoInvitado_) y filtra lo que guarda. */
 const CF_TABS_INV = [
   { k: 'casa', label: 'Casa social', perm: 'casa' },
+  { k: 'emergencia', label: 'Emergencia', perm: 'emergencia' },
   { k: 'inicio', label: 'Inicio de la app', perm: 'inicio' }
 ];
 function cfTabsVisibles() {
