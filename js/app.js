@@ -8292,6 +8292,18 @@ const CF_TABS = [
   { k: 'call', label: 'Call Center', dev: false },
   { k: 'avanzado', label: 'Avanzado', dev: true }
 ];
+/* 07/11/2026 · INVITADO con acceso a Configuración: solo los apartados que
+   le dieron (pastillas cf.casa / cf.inicio). El CORE además le manda solo
+   esos datos (cfTodoInvitado_) y filtra lo que guarda. */
+const CF_TABS_INV = [
+  { k: 'casa', label: 'Casa social', perm: 'casa' },
+  { k: 'inicio', label: 'Inicio de la app', perm: 'inicio' }
+];
+function cfTabsVisibles() {
+  if (CF.d && CF.d.esInvitado) { const pc = CF.d.permCf || {}; return CF_TABS_INV.filter(t => pc[t.perm]); }
+  return CF_TABS.filter(t => !t.dev || (CF.d && CF.d.esDev));
+}
+function cfTabInicial() { const t = cfTabsVisibles(); return t.length ? t[0].k : 'general'; }
 
 /* Claves de CONFIG agrupadas para la pestaña General. Lo que no esté aquí
    (y no sea plantilla ni de Avanzado) cae en "Otros ajustes": así una clave
@@ -8420,7 +8432,7 @@ async function viewConfig(user) {
      entrada, General. Antes se salía al inicio desde donde fuera y había que
      volver a entrar y a buscar la pestaña. */
   $('#backbtn').onclick = () => {
-    if (CF.tab !== 'general') { CF.tab = 'general'; cfRender(); window.scrollTo(0, 0); return; }
+    if (CF.d && CF.tab !== cfTabInicial()) { CF.tab = cfTabInicial(); cfRender(); window.scrollTo(0, 0); return; }
     go('home');
   };
   await cfCargar();
@@ -8449,6 +8461,7 @@ async function vivoConfig() {
 async function cfCargar() {
   try {
     CF.d = await api('priv.cfgTodo', {}, 'POST', cfAuth());
+    if (CF.d && CF.d.esInvitado) CF.tab = cfTabInicial();
     cfRender();
   } catch (e) {
     $('#cf-root').innerHTML = `<div class="card pad center"><p class="muted">${esc(String(e.message || e))}</p></div>`;
@@ -8456,14 +8469,15 @@ async function cfCargar() {
 }
 
 function cfRender() {
-  const tabs = CF_TABS.filter(t => !t.dev || CF.d.esDev);
-  if (!tabs.some(t => t.k === CF.tab)) CF.tab = 'general';
+  const tabs = cfTabsVisibles();
+  if (!tabs.length) { $('#cf-root').innerHTML = `<div class="card pad center"><p class="muted">No tienes apartados de Configuración asignados.</p></div>`; return; }
+  if (!tabs.some(t => t.k === CF.tab)) CF.tab = tabs[0].k;
   $('#cf-root').innerHTML = `
     <div class="cfg-tabs">${tabs.map(t => `<button class="cfg-tab${t.k === CF.tab ? ' active' : ''}" data-t="${t.k}">${esc(t.label)}</button>`).join('')}</div>
     <div id="cf-body"></div>`;
   $$('#cf-root .cfg-tab').forEach(b => b.onclick = () => { CF.tab = b.dataset.t; cfRender(); });
   ({
-    general: cfPintaGeneral, casa: cfPintaCasa, emergencia: cfPintaEmergencia,
+    general: cfPintaGeneral, casa: cfPintaCasa, inicio: cfPintaInicio, emergencia: cfPintaEmergencia,
     servicios: cfPintaServicios, profesionales: cfPintaProfesionales, zonas: cfPintaZonas,
     plantillas: cfPintaPlantillas, usuarios: cfPintaUsuarios, call: cfPintaCall, avanzado: cfPintaAvanzado
   })[CF.tab]();
@@ -8855,6 +8869,15 @@ function cfInicioInner() {
          'Pega el enlace de Google Drive o de YouTube. Déjalo vacío para no mostrar video.', true)}
      </div>`;
 }
+/* 07/11/2026 · pestaña propia del INVITADO (para los demás, Inicio vive en General) */
+function cfPintaInicio() {
+  /* Sin acordeón: es lo único de la pestaña, va abierto */
+  $('#cf-body').innerHTML = `<div class="card pad stack"><b>Inicio de la app pública</b><p class="cfg-card__sub">La imagen y el video que ve la gente al abrir la app.</p>${cfInicioInner()}
+    <div class="cfg-actions"><button class="btn btn-primary" id="cf-ini-save">Guardar video</button></div></div>`;
+  cfInicioBind();
+  $('#cf-ini-save').onclick = () => cfGuardarClaves($('#cf-ini-save'), ['INICIO_REEL_URL']);
+}
+function cfRepintarInicio() { if (CF.tab === 'inicio') cfPintaInicio(); else cfPintaGeneral(); }
 function cfInicioCard() {
   return cfCard('Inicio de la app pública', 'La imagen y el video que ve la gente al abrir la app.', cfInicioInner());
 }
@@ -8881,7 +8904,7 @@ function cfSubirInicio() {
         if (!r.ok) return toast(r.msg || 'No se pudo subir', 'err');
         CF.d.cfg.INICIO_IMAGEN_DRIVE = r.imagen;
         toast(r.purgada ? 'Imagen cambiada. La anterior se borró de Drive.' : 'Imagen subida', 'ok');
-        cfPintaGeneral();
+        cfRepintarInicio();
       } catch (e) { toast('Error de conexión', 'err'); }
     };
     rd.onerror = () => toast('No pude leer el archivo', 'err');
@@ -8900,7 +8923,7 @@ async function cfQuitarInicio(btn) {
     if (!r.ok) return toast(r.msg || 'No se pudo quitar', 'err');
     CF.d.cfg.INICIO_IMAGEN_DRIVE = '';
     toast('Imagen quitada', 'ok');
-    cfPintaGeneral();
+    cfRepintarInicio();
   } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
 }
 

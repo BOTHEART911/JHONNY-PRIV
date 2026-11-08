@@ -164,7 +164,7 @@
     bd: 'bd.ver', dashboard: 'dash.ver', simulador: 'sim.ver', votacion: 'voto.ver',
     lideres: 'lid.ver', eventos: 'ev.ver', agenda: 'ag.ver', compromisos: 'cm.ver',
     solicitudes: 'sl.ver', formularios: 'fm.ver', notificaciones: 'nt.ver', analisis: 'an.ver',
-    config: '', mibot: ''
+    config: 'cf.ver', mibot: ''   /* 07/11/2026: Configuración → solo Casa social / Inicio para el invitado */
   };
 
   /* ------------------------------------------------------------
@@ -206,7 +206,7 @@
 
   /* Primera ruta a la que sí puede entrar (para rebotarlo con sentido). */
   function permPrimeraRuta() {
-    var orden = ['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'solicitudes', 'formularios', 'notificaciones', 'analisis'];
+    var orden = ['bd', 'lideres', 'eventos', 'agenda', 'compromisos', 'solicitudes', 'formularios', 'notificaciones', 'analisis', 'config'];
     for (var i = 0; i < orden.length; i++) if (permRuta(orden[i])) return orden[i];
     return '';
   }
