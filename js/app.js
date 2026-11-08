@@ -9717,7 +9717,7 @@ function cfPintaUsuarios() {
         <div class="cfg-row-a">
           ${x.estado === 'ACTIVO' ? '' : '<span class="cfg-pill">Inactivo</span>'}
           ${x.esDev ? '<span class="cfg-pill cfg-pill-dev">Protegido</span>' : `
-            <button class="bd-btn" data-usbien="${esc(x.documento)}" title="${x.bienvenida ? 'Reenviar la bienvenida' : 'Enviar la bienvenida'}">${x.bienvenida ? I.repeat : I.wa}</button>
+            <button class="bd-btn" data-usbien="${esc(x.documento)}" title="${x.bienvenida ? 'Reenviar la bienvenida' : 'Enviar la bienvenida'}">${I.wa}</button>
             <button class="bd-btn" data-us="${esc(x.documento)}" title="Editar">${I.pencil}</button>
             ${puedeBorrar ? `<button class="bd-btn bd-btn-danger" data-usdel="${esc(x.documento)}" title="Eliminar">${I.trash}</button>` : ''}`}
         </div>

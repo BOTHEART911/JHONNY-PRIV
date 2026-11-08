@@ -718,6 +718,11 @@ body.wide .com-card { max-width: 360px; margin: 0 auto; width: 100%; }
 .bd-btn:active { transform: scale(.96); }
 .bd-btn:disabled { opacity: .45; }
 .bd-btn-danger { background: #FBE4E4; color: #B03636; }
+/* 08/11/2026: el ícono de los botones de acción no tenía tamaño y quedaba en 0 (botones vacíos en Configuración) */
+.bd-btn > svg { width: 17px; height: 17px; flex: none; vertical-align: middle; }
+.cfg-row-a .bd-btn { flex: 0 0 38px; width: 38px; height: 38px; padding: 0; display: inline-grid; place-items: center; }
+.cfg-row-a .bd-btn[data-usbien] { background: #E3F7EA; color: #128C4A; }
+.cfg-row-a .bd-btn[data-unb] { background: #E3F7EA; color: #128C4A; }
 .bd-btn-reasg { background: #EAE6FB; color: #5B3FB0; }
 .reasg-cur { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2, #F2F5FA); border-radius: 12px; padding: 10px 12px; }
 .reasg-cur span { color: var(--muted); font-size: 12.5px; }

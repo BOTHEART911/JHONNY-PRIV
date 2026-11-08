@@ -210,3 +210,5 @@ html.oscuro .ld-bit-k--comp{ background:#173A28; color:#86D9A8; }
 html.oscuro .ldi-mes{ background:#262C36; border-color:#333A45; color:#E6E9EE; }
 html.oscuro .ldi-mes.on{ background:#1D3456; border-color:#4D9BFF; }
 html.oscuro .ldi-mes.on b{ color:#9CC7FF; }
+
+html.oscuro .cfg-row-a .bd-btn[data-usbien], html.oscuro .cfg-row-a .bd-btn[data-unb]{ background:#1F3A2C; color:#7EDBA4; }
