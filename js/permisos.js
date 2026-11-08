@@ -35,6 +35,7 @@
     ['#bd-excel', 'bd.excel'],
     ['#bd-pdf', 'bd.pdf'],
     ['#bd-subir', 'bd.puestoLote'],
+    ['#bd-pend', 'bd.cargaMasiva'],           /* 08/11/2026 · pendientes sin conexión */
     ['#bd-reset', 'bd.reiniciar'],          /* no existe en el catálogo = nunca */
     ['#bd-dashboard', 'dash.ver'],
     ['#bd-simulador', 'sim.ver'],

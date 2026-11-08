@@ -99,6 +99,8 @@ const VIVO_DEV = (() => {
 async function api(action, params = {}, method = 'GET', body = null, opts = {}) {
   if (API_URL.startsWith('PEGA_AQUI')) { toast('Falta configurar la URL del backend', 'err'); throw new Error('API_URL sin configurar'); }
   const callado = !!opts.silent;
+  /* 08/11/2026 · sin conexión: lo que escribe se avisa al instante (no espera 60 s) */
+  if (!RED.esLectura(action) && window.SINRED && !SINRED.enLinea()) { const e = new Error('Sin conexión: esto necesita señal'); e.red = true; throw e; }
   if (!callado) loaderOn();
   let json;
   try {
@@ -107,6 +109,7 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
   } catch (e) {
     if (!callado) loaderOff();
     if (e && e.cortado) return new Promise(() => {});
+    if (window.SINRED) SINRED.fallo(e);
     throw e;
   }
   if (!callado) loaderOff();
@@ -228,7 +231,9 @@ const getActive = () => { const d = localStorage.getItem(ACT_KEY); return getSes
 RED.sesion(() => { const u = getActive(); return u ? { tk: u.tk || '', id: u.documento } : null; });
 const setActive = (doc) => localStorage.setItem(ACT_KEY, doc);
 function forgetSession(doc) { const list = getSessions().filter(x => x.documento !== doc); localStorage.setItem(SS_KEY, JSON.stringify(list)); if (localStorage.getItem(ACT_KEY) === doc) localStorage.removeItem(ACT_KEY); }
-function logout() { localStorage.removeItem(ACT_KEY); try { RAP.olvidar(); } catch (e) {} go('login'); }
+/* 08/11/2026 · con pendientes sin subir se avisa y se borran (celular compartido): pendientes.js */
+function logout() { if (window.PEND && PEND.logout) return PEND.logout(); logoutDirecto(); }
+function logoutDirecto() { localStorage.removeItem(ACT_KEY); try { RAP.olvidar(); } catch (e) {} go('login'); }
 
 /* ============================================================
    PWA: INSTALACIÓN  (patrón SEP-GROUP, idéntico a la pública)
@@ -1358,6 +1363,7 @@ async function viewBaseDatos(user) {
           <input class="input" id="bd-q" placeholder="Buscar por nombre, documento o residencia…" autocomplete="off" />
         </div>
         <button class="btn btn-primary bd-add" id="bd-add">+ Agregar</button>
+        <button class="btn btn-ghost bd-add bd-pend" id="bd-pend" title="Lo anotado sin señal o pegado, para revisar y subir">${I.upload} Pendientes <span class="sr-badge" data-pend-n ${window.SINRED && SINRED.contar(user.documento) ? '' : 'hidden'}>${window.SINRED ? (SINRED.contar(user.documento) || '') : ''}</span></button>
       </div>
       <div class="bd-nav">
         <button class="btn btn-ghost bd-nav-btn" id="bd-dashboard">${I.chart} Dashboard</button>
@@ -1386,6 +1392,7 @@ async function viewBaseDatos(user) {
   app.hidden = false; hideSplash();
   $('#backbtn').onclick = () => go('home');
   $('#bd-add').onclick = () => bdAgregar();
+  { const bp = $('#bd-pend'); if (bp) bp.onclick = () => window.PEND && PEND.bdPendientes(user); }   /* 08/11/2026 */
   $('#bd-dashboard').onclick = () => go('dashboard');
   $('#bd-simulador').onclick = () => go('simulador');
   $('#bd-votacion').onclick = () => go('votacion');
@@ -2251,6 +2258,8 @@ async function bdLoteRecargar() {
 
 /* ---- AGREGAR nuevo contacto (documento primero, luego se desbloquea) ---- */
 function bdAgregar() {
+  /* 08/11/2026 · sin señal no se puede buscar el documento: se anota en Pendientes */
+  if (window.SINRED && !SINRED.enLinea() && window.PEND) return PEND.anotar({ dueno: BD_ME || (getActive() || {}).documento, titulo: 'Anotar sin señal' });
   openSheet(`<div class="grip"></div><h2 class="h2" style="margin-bottom:6px;">Agregar contacto</h2>
     <p class="muted small">Primero el documento: lo buscamos para no duplicar. Si está libre, se habilita el resto.</p>
     <div class="stack">
@@ -6885,7 +6894,23 @@ async function slEliminar(id) {
 /* ============================================================
    ARRANQUE  (gate de instalación como SEP-GROUP)
    ============================================================ */
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+/* 08/11/2026 · regla de publicación (modo fresco): el SW se registra sin la
+   caché HTTP (updateViaCache 'none') y pide update() al cargar; si un SW nuevo
+   toma el control de una página que ya tenía uno, se recarga UNA vez por
+   versión (freno en sessionStorage). La primera instalación no recarga. */
+if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+  const habia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { try { r.update(); } catch (e) {} }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!habia) return;
+    const k = nsKey('jpriv_sw_cc_' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''));
+    try { if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); } catch (e) { return; }
+    if (window.RED && RED.escriturasEnVuelo > 0) return;
+    const capa = document.getElementById('layer');
+    if (capa && capa.children.length) return;   /* no se recarga encima de una hoja abierta (se perdería lo escrito) */
+    location.reload();
+  });
+});
 async function initApp() {
   if (typeof APP_VERSION !== 'undefined' && APP_VERSION) { APP_VERSION_LOADED = String(APP_VERSION); paintVersion(APP_VERSION_LOADED); }
   checkVersion(); setInterval(checkVersion, 60000);
