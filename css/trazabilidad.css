@@ -78,3 +78,13 @@ html.oscuro .tz-e-pend { background: #3a2a0c; color: #F5C26B; }
 .ag-meta { font-size: .78rem; color: var(--muted); }
 .ag-limpiar { border: 0; background: none; color: var(--brand); font-weight: 700; cursor: pointer; padding: 0; }
 @media (max-width: 640px) { .ag-top { grid-template-columns: 1fr; } }
+
+/* ============ CONFIG → Casa social: redes con su logo (08/11/2026) ============ */
+.cfg-row-red { align-items: center; gap: 12px; }
+.cfg-row-red > .red-logo { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px; }
+.cf-redsel { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; margin-top: 6px; }
+.cf-redop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: inherit; font: 700 .74rem var(--font-body, inherit); cursor: pointer; }
+.cf-redop .red-logo { width: 34px; height: 34px; border-radius: 9px; }
+.cf-redop.on { border-color: var(--brand); background: var(--brand-050); }
+#cf-rd-av { color: #8A4B00; }
+html.oscuro #cf-rd-av { color: #F5C26B; }

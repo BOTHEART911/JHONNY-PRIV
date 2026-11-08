@@ -9144,7 +9144,8 @@ function cfPintaCasa() {
 
   const redesHtml = cfCard('Redes sociales', 'Se muestran dentro de la casa social.',
     (redes.length ? `<ul class="cfg-list">${redes.map(r => `
-      <li class="cfg-row${r.activo ? '' : ' off'}">
+      <li class="cfg-row cfg-row-red${r.activo ? '' : ' off'}">
+        ${window.redLogo ? redLogo(redTipo(r.enlace)) : ''}
         <div class="cfg-row-t"><b>${esc(r.nombre)}</b><span class="cfg-row-s">${esc(r.enlace)}</span></div>
         <div class="cfg-row-a">
           ${r.activo ? '' : '<span class="cfg-pill">Oculta</span>'}
@@ -9253,22 +9254,53 @@ async function cfImgQuitar(dia) {
   } catch (e) { toast('Error de conexión', 'err'); }
 }
 
+/* "www.youtube.com/@canal" → "https://www.youtube.com/@canal" (el CORE exige http/https) */
+function cfEnlaceCompleto(e) { e = String(e || '').trim(); return e && !/^https?:\/\//i.test(e) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(e) ? 'https://' + e : e; }
 function cfRedSheet(red) {
   openSheet(`<div class="grip"></div>
     <h2 class="h2">${red ? 'Editar red' : 'Nueva red'}</h2>
     <div class="stack" style="margin-top:14px;">
+      ${window.REDES_CAT ? `<div class="field"><span>Red social</span><div class="cf-redsel" id="cf-rd-k">${REDES_CAT.map(c => `<button type="button" class="cf-redop" data-k="${c.k}">${redLogo(c.k)}<span>${c.n}</span></button>`).join('')}</div></div>` : ''}
       ${field('Nombre', inputEl('cf-rd-n', `value="${esc(red ? red.nombre : '')}" placeholder="Ej. Facebook"`))}
       ${field('Enlace', inputEl('cf-rd-e', `value="${esc(red ? red.enlace : '')}" placeholder="https://…"`))}
+      <p class="small muted" id="cf-rd-av" style="margin:-4px 0 0;"></p>
       <label class="check-row"><input type="checkbox" id="cf-rd-a" ${!red || red.activo ? 'checked' : ''} /><span>Visible en la app pública</span></label>
       <button class="btn btn-primary btn-block" id="cf-rd-save">Guardar</button>
       <button class="btn btn-quiet btn-block" data-close>Cancelar</button>
     </div>`);
   cfHoja('casa-red', red && red.id, { 'cf-rd-n': 'nombre', 'cf-rd-e': 'enlace', 'cf-rd-a': 'activo' });
+  /* Selector de red: marca el logo, pone el nombre si está vacío o era otra
+     red, y avisa si el enlace no es de esa red (el icono en la app pública
+     sale del enlace, no del nombre). */
+  let elegida = '';
+  const nombreDe = k => (REDES_CAT.filter(c => c.k === k)[0] || {}).n || '';
+  const revisar = () => {
+    const av = $('#cf-rd-av'); if (!av || !window.redTipo) return;
+    const e = val('cf-rd-e').trim(), t = e ? redTipo(e) : '';
+    if (!elegida && t) marcar(t, false);
+    av.textContent = e && elegida && elegida !== 'web' && t !== elegida ? `Ese enlace no parece de ${nombreDe(elegida)}: en la app pública se verá con el ícono de ${t === 'web' ? 'enlace' : nombreDe(t)}.` : '';
+  };
+  const marcar = (k, tocado) => {
+    const antes = elegida; elegida = k;
+    $$('#cf-rd-k .cf-redop').forEach(b => b.classList.toggle('on', b.dataset.k === k));
+    if (tocado) {
+      const n = $('#cf-rd-n'), v = n.value.trim();
+      if (k !== 'web' && (!v || v === nombreDe(antes))) n.value = nombreDe(k);
+      const ej = (REDES_CAT.filter(c => c.k === k)[0] || {}).ej; if (ej) $('#cf-rd-e').placeholder = ej;
+      (val('cf-rd-e') ? n : $('#cf-rd-e')).focus();
+    }
+    revisar();
+  };
+  if (window.REDES_CAT) {
+    $$('#cf-rd-k .cf-redop').forEach(b => b.onclick = () => marcar(b.dataset.k, true));
+    $('#cf-rd-e').addEventListener('input', revisar);
+    if (red && red.enlace) marcar(redTipo(red.enlace), false);
+  }
   $('#cf-rd-save').onclick = async e => {
     saving(e.currentTarget, true);
     try {
       const r = await api('priv.cfgRed', {}, 'POST', Object.assign(cfAuth(), {
-        id: red ? red.id : '', nombre: val('cf-rd-n'), enlace: val('cf-rd-e'), activo: $('#cf-rd-a').checked
+        id: red ? red.id : '', nombre: val('cf-rd-n'), enlace: cfEnlaceCompleto(val('cf-rd-e')), activo: $('#cf-rd-a').checked
       }));
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
