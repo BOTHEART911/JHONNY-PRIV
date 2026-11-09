@@ -148,6 +148,7 @@
     var p = [], f = bdActiveFilter();
     if (f && f !== 'Todos') p.push(f);
     if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
+    if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
     if (BD_LID === 'SIN') p.push('Sin líder');
     else if (BD_LID) { var l = (BD_LIDERES || []).find(function (x) { return String(x.codigo) === String(BD_LID); }); p.push('Líder: ' + (l ? l.nombre : '#' + BD_LID)); }
     var q = bdQ(); if (q) p.push('Búsqueda: "' + q + '"');
@@ -206,6 +207,7 @@
       ULT = calcular();
       pintarChips(ULT);
       pintarFranja(ULT.tend);
+      if (window.bdActPintar) bdActPintar();   /* 09/11/2026 · fila de actividad (bd-actividad.js) */
       var hoja = document.getElementById('bdt-hoja');
       if (hoja) { var sl = (hoja.querySelector('.bdt-graf') || {}).scrollLeft; hoja.innerHTML = cuerpoHoja(ULT.tend); var g = hoja.querySelector('.bdt-graf'); if (g && sl != null) g.scrollLeft = sl; }
     } catch (err) { try { console.warn('bdTablero', err); } catch (x) {} }

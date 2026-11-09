@@ -1404,12 +1404,16 @@ async function viewBaseDatos(user) {
      desde la caché y solo vuelve al servidor si /meta dice que algo cambió. */
   let primera = true;
   BD_INT.clear();
+  if (window.bdActReiniciar) bdActReiniciar();
   try {
-    await rapCargar('priv.baseDatos', { caller: BD_ME }, (r) => {
+    /* act=1 (09/11/2026): la lista trae quién tiene servicios, compromisos,
+       eventos y formularios (fila de filtros por actividad, bd-actividad.js) */
+    await rapCargar('priv.baseDatos', { caller: BD_ME, act: '1' }, (r) => {
       if (!$('#bd-body')) return;                         // ya salió de la vista
       if (!r || r.ok === false) { if (primera) $('#bd-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
       BD_ALL = r.items || []; BD_REG_URL = r.registraduriaUrl || '';
       BD_LIDERES = r.lideres || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
+      if (window.bdActDato) bdActDato(r.act);
       bdBuildIntChips();
       if (primera) bdBindLiderCombo();                    // el combo solo se arma una vez (no pierde lo elegido)
       primera = false;
@@ -1475,11 +1479,12 @@ async function vivoBd(rev) {
   }
 
   /* No sabemos qué cambió: recarga completa (rara) */
-  const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME }, RAP.params()), 'GET', null, SILENCIO);
+  const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME, act: '1' }, RAP.params()), 'GET', null, SILENCIO);
   if (!r || r.ok === false) return;
   RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
   if (!vivoCambio(JSON.stringify(r.items))) { medir('lista-sin-cambio'); return; }
   BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
+  if (window.bdActDato) bdActDato(r.act);
   bdBuildIntChips(); bdApplyFilter(); vivoCerrarHoja(rev);
   medir('lista');
 }
@@ -1516,6 +1521,7 @@ function bdFiltroTxt() {
   if (BD_LID === 'SIN') p.push('Sin líder asignado');
   else if (BD_LID) { const l = BD_LIDERES.find(x => String(x.codigo) === String(BD_LID)); p.push('Líder: ' + (l ? bdLiderLabel(l) : '#' + BD_LID)); }
   if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
+  if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
   const q = (($('#bd-q') || {}).value || '').trim(); if (q) p.push('Búsqueda: “' + q + '”');
   return p.length ? p.join(' · ') : 'Todos los registros';
 }
@@ -1677,7 +1683,8 @@ function bdPasaChip(c, f) {
   if (f === 'Otros') return !(MV.esMunicipio(mun) || ['SIN CONSULTAR','A LA ESPERA','POR CONFIRMAR'].indexOf(mun) !== -1);
   return true;                                          // Todos
 }
-function bdPasaResto(c, q, sinInt) {
+function bdPasaResto(c, q, sinInt, sinAct) {
+  if (!sinAct && window.bdActPasa && !bdActPasa(c)) return false;   /* 09/11/2026 · Servicios/Compromisos/Eventos/Formularios */
   if (!sinInt && BD_INT.size && !BD_INT.has(String(c.intencion || '').trim())) return false;
   if (BD_LID === 'SIN') { if (String(c.referencia || '')) return false; }
   else if (BD_LID && String(c.referencia || '') !== String(BD_LID)) return false;
@@ -2265,10 +2272,11 @@ async function bdLoteRespaldo(antes) {
    (son cientos de filas cambiadas; traer tarjeta por tarjeta sería peor). */
 async function bdLoteRecargar() {
   try {
-    const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME }, RAP.params()), 'GET', null, { silent: true });
+    const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME, act: '1' }, RAP.params()), 'GET', null, { silent: true });
     if (!r || r.ok === false) return;
     RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
     BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
+    if (window.bdActDato) bdActDato(r.act);
     bdBuildIntChips(); bdApplyFilter();
   } catch (e) { /* la vista sigue usable; el refresco en vivo la pondrá al día */ }
 }
@@ -4274,7 +4282,7 @@ async function viewDashboard(user) {
   DASH_GROUP = 'residencia'; DASH_TOPN = 15; DASH_Q = ''; DASH_SOLO_PUESTO = false; DASH_SIN_REG = false; DASH_INT.clear();
   let primera = true;
   try {
-    await rapCargar('priv.baseDatos', { caller: DASH_ME }, (r) => {
+    await rapCargar('priv.baseDatos', { caller: DASH_ME, act: '1' }, (r) => {   /* act=1: misma caché que Base de datos */
       if (!$('#dash-body')) return;
       if (!r || r.ok === false) { if (primera) $('#dash-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
       if (!r.dash) return dashViejo(primera);   // CORE todavía sin la Fase 2: se usa la ruta de antes
@@ -4321,7 +4329,7 @@ async function vivoDashboard(rev) {
     dashDesdeBd(c.data); dashRender(); vivoCerrarHoja(rev);
     return;
   }
-  const r = await api('priv.baseDatos', Object.assign({ caller: DASH_ME }, RAP.params()), 'GET', null, SILENCIO);
+  const r = await api('priv.baseDatos', Object.assign({ caller: DASH_ME, act: '1' }, RAP.params()), 'GET', null, SILENCIO);
   if (!r || r.ok === false) return;
   RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
   if (!vivoCambio(JSON.stringify(r.items))) return;

@@ -1,0 +1,29 @@
+/* ============================================================================
+ * JHONNY PRIV · BASE DE DATOS — FILTROS POR ACTIVIDAD (09/11/2026)
+ * Pareja: js/bd-actividad.js. Solo tokens del :root → el tema oscuro funciona solo.
+ * ============================================================================ */
+.bd-chips-act, .bd-chips-act2 { margin-top: 8px; align-items: center; }
+.bd-chips-act[hidden], .bd-chips-act2[hidden] { display: none; }
+
+.bd-chip-act, .bd-chip-act2 { display: inline-flex; align-items: center; gap: 6px; }
+.bd-chip-act .bd-chip-n, .bd-chip-act2 .bd-chip-n { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--brand-050); color: var(--brand-700); font-variant-numeric: tabular-nums; }
+.bd-chip-act.active .bd-chip-n, .bd-chip-act2.active .bd-chip-n { background: rgba(255,255,255,.28); color: #fff; }
+.bd-chip-act.bd-chip-cero, .bd-chip-act2.bd-chip-cero { opacity: .55; }
+
+/* Flechita: esta pastilla abre una segunda fila */
+.bda-car { width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); opacity: .6; margin-left: 1px; transition: transform .18s ease; }
+.bd-chip-act.active .bda-car { transform: rotate(-135deg) translate(-1px, -1px); opacity: .9; }
+
+/* Segunda fila: una pastilla por servicio / evento / formulario */
+.bd-chips-act2 { padding: 8px 10px 10px; border-radius: var(--r-md); background: var(--brand-050); }
+.bd-chip-act2 { max-width: 320px; }
+.bd-chip-act2 .bda-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bd-chip-act2 .bda-f { font-size: 11px; font-weight: 600; opacity: .7; white-space: nowrap; }
+.bda-vacio { align-self: center; padding: 4px 2px; }
+
+html.oscuro .bd-chip-act .bd-chip-n, html.oscuro .bd-chip-act2 .bd-chip-n { color: #9CC8FF; }
+html.oscuro .bd-chip-act.active .bd-chip-n, html.oscuro .bd-chip-act2.active .bd-chip-n { color: #fff; }
+html.oscuro .bd-chips-act2 { background: rgba(var(--brand-rgb), .12); }
+
+@media (max-width: 640px) { .bd-chip-act2 { max-width: 240px; } }
+@media (prefers-reduced-motion: reduce) { .bda-car { transition: none; } }
