@@ -78,7 +78,8 @@
      llega se guarda en la caché de sesión con la MISMA clave que usa Detalles
      (priv.trazabilidad:<doc>) y con su rv: al abrir se pinta de ahí y solo se
      revalida si un canal cambió. */
-  const TZP = { pend: new Map(), cola: [], t: 0, off: false, io: null, lotes: 0 };
+  const TZP = { pend: new Map(), cola: [], t: 0, off: false, io: null, lotes: 0, enVista: 0 };
+  const TZP_TOPE = 30;   // lotes por visita a la vista (≈360 personas): quien baja mucho no gasta cuota sin fin
   const tzpClave = d => 'priv.trazabilidad:' + d;
   function tzpUsuario() { try { RAP.setUsuario((getActive() || {}).documento || ''); } catch (e) {} }
   function tzpHay(d) { tzpUsuario(); return !!RAP.tomar(tzpClave(d)); }
@@ -95,8 +96,8 @@
     clearTimeout(TZP.t); TZP.t = setTimeout(tzpVaciar, 200);
   }
   function tzpVaciar() {
-    if (!tzpPuede()) { TZP.cola = []; return; }
-    while (TZP.cola.length) {
+    if (!tzpPuede() || TZP.enVista >= TZP_TOPE) { TZP.cola = []; return; }
+    while (TZP.cola.length && TZP.enVista < TZP_TOPE) {
       const docs = TZP.cola.splice(0, 12).filter(d => !TZP.pend.has(d) && !tzpHay(d));
       if (!docs.length) continue;
       tzpLote(docs);
@@ -108,7 +109,7 @@
     let listo; const prom = new Promise(r => { listo = r; });
     docs.forEach(d => TZP.pend.set(d, prom));
     const fin = () => { docs.forEach(d => { if (TZP.pend.get(d) === prom) TZP.pend.delete(d); }); listo(); };
-    TZP.lotes++;
+    TZP.lotes++; TZP.enVista++;
     api('priv.trazabilidadLote', Object.assign({ docs: docs.join(',') }, auth()), 'GET', null, SILENCIO)
       .then(r => {
         tzpUsuario();
@@ -153,7 +154,7 @@
     });
     if (window.RED && RED.nuevaVista && !RED.nuevaVista.__tzp) {
       const nv = RED.nuevaVista;
-      RED.nuevaVista = function () { TZP.cola = []; clearTimeout(TZP.t); TZP.pend.clear(); if (TZP.io) { TZP.io.disconnect(); TZP.io = null; } return nv.apply(this, arguments); };
+      RED.nuevaVista = function () { TZP.cola = []; clearTimeout(TZP.t); TZP.pend.clear(); TZP.enVista = 0; if (TZP.io) { TZP.io.disconnect(); TZP.io = null; } return nv.apply(this, arguments); };
       RED.nuevaVista.__tzp = true;
     }
   }
