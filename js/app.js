@@ -2081,7 +2081,37 @@ function parseRegistraduria(text, targetDoc) {
    tiene el MISMO formato y se puede volver a subir para deshacer.
    ============================================================ */
 const BD_LOTE_TANDA = 300;          // filas por llamada (el CORE tolera hasta 500)
-const BD_LOTE_COLS = ['DOCUMENTO', 'DEPARTAMENTO', 'MUNICIPIO', 'PUESTO', 'DIRECCION', 'MESA'];
+const BD_LOTE_COLS = ['DOCUMENTO', 'DEPARTAMENTO', 'MUNICIPIO', 'PUESTO', 'DIRECCION', 'MESA', 'MOTIVO'];
+/* 09/11/2026 · columna G MOTIVO (solo para POR CONFIRMAR) y C con fórmula:
+   al pegar un documento en A, C queda POR CONFIRMAR. */
+const BD_LOTE_MOTIVOS = ['NO APARECE EN CENSO', 'MUERTE'];
+const BD_LOTE_FILAS = 3000;   // filas con fórmula y lista en la plantilla
+function bdLoteMotivoNorm(v) {
+  const s = String(v || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (!s) return '';
+  if (/CENSO/.test(s)) return 'NO APARECE EN CENSO';
+  if (/MUERT|FALLEC/.test(s)) return 'MUERTE';
+  return '?';
+}
+/* Plantilla: SheetJS arma el libro; la lista desplegable de G se inyecta en
+   el XML de la hoja (SheetJS no escribe validaciones) con su propio CFB. */
+function bdLotePlantillaBin(X) {
+  const ws = X.utils.aoa_to_sheet([BD_LOTE_COLS.slice()]);
+  for (let r = 2; r <= BD_LOTE_FILAS; r++) ws['C' + r] = { t: 's', v: '', f: `IF(A${r}<>"","POR CONFIRMAR","")` };
+  ws['!ref'] = 'A1:G' + BD_LOTE_FILAS;
+  ws['!cols'] = BD_LOTE_COLS.map(c => ({ wch: c === 'MOTIVO' ? 24 : (c === 'DIRECCION' || c === 'PUESTO' ? 28 : 16) }));
+  const wb = X.utils.book_new();
+  X.utils.book_append_sheet(wb, ws, 'PUESTOS');
+  const bin = X.write(wb, { bookType: 'xlsx', type: 'array' });
+  const z = X.CFB.read(new Uint8Array(bin), { type: 'array' });
+  const ruta = z.FullPaths.find(p => /xl\/worksheets\/sheet1\.xml$/.test(p));
+  let xml = new TextDecoder().decode(z.FileIndex[z.FullPaths.indexOf(ruta)].content);
+  const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige NO APARECE EN CENSO o MUERTE." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>"${BD_LOTE_MOTIVOS.join(',')}"</formula1></dataValidation></dataValidations>`;
+  const tras = /<(hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|drawing|legacyDrawing|tableParts|extLst)([ >\/])/;
+  xml = tras.test(xml) ? xml.replace(tras, dv + '<$1$2') : xml.replace('</worksheet>', dv + '</worksheet>');
+  X.CFB.utils.cfb_add(z, ruta, new TextEncoder().encode(xml));
+  return X.CFB.write(z, { fileType: 'zip', type: 'array', compression: true });
+}
 let BD_XLSX_LIB = null;
 
 /* Carga perezosa del lector de Excel. Una sola vez por sesión. */
@@ -2117,10 +2147,10 @@ async function bdLotePlantilla(btn) {
   saving(btn, true);
   try {
     const X = await cargarXlsx();
-    const wb = X.utils.book_new();
-    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([BD_LOTE_COLS.slice()]), 'PUESTOS');
-    const b64 = X.write(wb, { bookType: 'xlsx', type: 'base64' });
-    downloadB64(b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'PLANTILLA_CARGA_PUESTOS.xlsx');
+    const bin = new Uint8Array(bdLotePlantillaBin(X));
+    let b64 = '';
+    for (let i = 0; i < bin.length; i += 0x8000) b64 += String.fromCharCode.apply(null, bin.subarray(i, i + 0x8000));
+    downloadB64(btoa(b64), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'PLANTILLA_CARGA_PUESTOS.xlsx');
     saving(btn, false);
     toast('Plantilla descargada', 'ok');
   } catch (e) {
@@ -2137,9 +2167,12 @@ function bdLoteMasiva() {
       <div class="lote-cols">
         <span><b>A</b> Documento</span><span><b>B</b> Departamento</span><span><b>C</b> Municipio</span>
         <span><b>D</b> Puesto</span><span><b>E</b> Dirección</span><span><b>F</b> Mesa</span>
+        <span><b>G</b> Motivo</span>
       </div>
       <ul class="lote-notas">
         <li>Con o sin fila de títulos, da igual.</li>
+        <li>En la plantilla, al pegar un documento en A, <b>C queda POR CONFIRMAR</b> sola. Si pegas encima lo consultado, se reemplaza.</li>
+        <li><b>G Motivo</b> (lista): NO APARECE EN CENSO o MUERTE, solo para POR CONFIRMAR. Es lo que verá el líder en Validación de registros.</li>
         <li>La columna A manda: se actualiza la fila de ese documento.</li>
         <li><b>Celda vacía borra el dato.</b> Una fila con solo “POR CONFIRMAR” en C deja el resto en blanco.</li>
         <li>Formatos: .xlsx o .csv</li>
@@ -2169,9 +2202,16 @@ function bdLoteMasiva() {
 async function bdLoteLeer(file) {
   const X = await cargarXlsx();
   const buf = await file.arrayBuffer();
-  const wb = X.read(new Uint8Array(buf), { type: 'array' });
+  const wb = X.read(new Uint8Array(buf), { type: 'array', sheetStubs: true });   /* stubs: ver la fórmula de C aunque no esté calculada */
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const aoa = X.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: false });
+  const aoa = X.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: true });
+  /* 09/11/2026 · C con la fórmula de la plantilla pero sin valor calculado
+     (algún programa no la recalculó): con documento en A vale POR CONFIRMAR. */
+  const r0 = X.utils.decode_range(ws['!ref'] || 'A1').s.r;
+  aoa.forEach((fila, i) => {
+    const cel = ws['C' + (r0 + i + 1)];
+    if (fila && cel && cel.f && /POR CONFIRMAR/i.test(cel.f) && !String(fila[2] || '').trim() && String(fila[0] || '').trim()) fila[2] = 'POR CONFIRMAR';
+  });
   return bdLoteFilas(aoa);
 }
 
@@ -2184,7 +2224,8 @@ function bdLoteFilas(aoa) {
     if (!mapa.has(d)) orden.push(d);
     mapa.set(d, {
       d, g: c(1).toUpperCase(), h: c(2).toUpperCase(),
-      i: c(3).toUpperCase(), j: c(4).toUpperCase(), k: c(5)
+      i: c(3).toUpperCase(), j: c(4).toUpperCase(), k: c(5),
+      m: bdLoteMotivoNorm(c(6))   /* 09/11/2026 · '' | motivo | '?' (no válido) */
     });
   });
   return orden.map(d => mapa.get(d));
@@ -2202,6 +2243,14 @@ function bdLotePrevia(filas, nombreArchivo) {
   const avisos = [];
   if (enBlanco.length) avisos.push(`<li><b>${enBlanco.length.toLocaleString('es-CO')}</b> quedan sin departamento, puesto, dirección ni mesa (lo que tuvieran se borra).</li>`);
   if (fuera.length) avisos.push(`<li><b>${fuera.length.toLocaleString('es-CO')}</b> quedan con municipio distinto de ${esc(MV.municipio)}: esos documentos <b>no podrán registrar voto</b> en la app de Votación.</li>`);
+  /* 09/11/2026 · motivo de POR CONFIRMAR (columna G) */
+  const porConf = hay.filter(f => f.h === 'POR CONFIRMAR');
+  const sinMot = porConf.filter(f => !f.m || f.m === '?');
+  const malMot = hay.filter(f => f.m === '?');
+  const motSobra = hay.filter(f => f.h !== 'POR CONFIRMAR' && f.m && f.m !== '?');
+  if (porConf.length) avisos.push(`<li><b>${porConf.length.toLocaleString('es-CO')}</b> quedan POR CONFIRMAR y aparecerán a su líder en Validación de registros.</li>`);
+  if (sinMot.length) avisos.push(`<li><b>${sinMot.length.toLocaleString('es-CO')}</b> POR CONFIRMAR van <b>sin motivo</b> (columna G vacía${malMot.length ? ' o no válida' : ''}): el líder los verá como “Por confirmar”.</li>`);
+  if (motSobra.length) avisos.push(`<li><b>${motSobra.length.toLocaleString('es-CO')}</b> traen motivo pero no están POR CONFIRMAR: el motivo no se guarda.</li>`);
 
   $('#lote-res').innerHTML = `
     <div class="lote-resumen">
@@ -2214,7 +2263,7 @@ function bdLotePrevia(filas, nombreArchivo) {
       ${avisos.length ? `<ul class="lote-avisos">${avisos.join('')}</ul>` : ''}
       ${hay.length ? `<div class="lote-tabla-wrap"><table class="lote-tabla">
         <thead><tr>${BD_LOTE_COLS.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
-        <tbody>${hay.slice(0, 5).map(f => `<tr><td>${esc(f.d)}</td><td>${esc(f.g)}</td><td>${esc(f.h)}</td><td>${esc(f.i)}</td><td>${esc(f.j)}</td><td>${esc(f.k)}</td></tr>`).join('')}</tbody>
+        <tbody>${hay.slice(0, 5).map(f => `<tr><td>${esc(f.d)}</td><td>${esc(f.g)}</td><td>${esc(f.h)}</td><td>${esc(f.i)}</td><td>${esc(f.j)}</td><td>${esc(f.k)}</td><td>${esc(f.h === 'POR CONFIRMAR' && f.m !== '?' ? f.m : '')}</td></tr>`).join('')}</tbody>
       </table>${hay.length > 5 ? `<p class="muted small" style="margin-top:6px;">Se muestran las 5 primeras.</p>` : ''}</div>` : ''}
       ${faltan.length ? `<button class="btn btn-quiet btn-block" id="lote-faltan">Ver los ${faltan.length.toLocaleString('es-CO')} que no están</button>` : ''}
       <div class="stack" style="margin-top:14px;">
@@ -2242,7 +2291,7 @@ async function bdLoteAplicar(filas) {
   let n = 0, antes = [], faltan = [], nuevos = [];
   try {
     for (let t = 0; t < tandas.length; t++) {
-      const r = await api('priv.puestoLote', {}, 'POST', { ...auth(), filas: tandas[t] }, { silent: true });
+      const r = await api('priv.puestoLote', {}, 'POST', { ...auth(), filas: tandas[t], conMotivo: true }, { silent: true });
       if (!r.ok) throw new Error(r.msg || 'No se pudo actualizar');
       n += Number(r.n || 0);
       antes = antes.concat(r.antes || []);
@@ -2294,7 +2343,7 @@ function bdLoteFinal(n, antes, faltan, nuevos, parcial) {
 async function bdLoteRespaldo(antes) {
   try {
     const X = await cargarXlsx();
-    const aoa = [BD_LOTE_COLS.slice()].concat(antes.map(f => f.slice(0, 6)));
+    const aoa = [BD_LOTE_COLS.slice()].concat(antes.map(f => f.slice(0, 7)));
     const wb = X.utils.book_new();
     X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(aoa), 'ANTES');
     const b64 = X.write(wb, { bookType: 'xlsx', type: 'base64' });
