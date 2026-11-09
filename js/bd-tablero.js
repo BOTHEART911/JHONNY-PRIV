@@ -93,7 +93,7 @@
     if (ant == null) return { cls: 'eq', txt: '—', tip: 'Sin mes anterior' };
     var d = act - ant;
     if (d === 0) return { cls: 'eq', txt: '= 0', tip: 'Igual que el mes anterior' };
-    var pct = ant > 0 ? Math.round(Math.abs(d) * 100 / ant) + ' %' : 'nuevo';
+    var pct = ant > 0 ? n(Math.round(Math.abs(d) * 100 / ant)) + ' %' : 'nuevo';
     return { cls: d > 0 ? 'up' : 'down', txt: (d > 0 ? '▲ +' : '▼ ') + n(d) + ' (' + pct + ')', tip: '' };
   }
 
@@ -156,7 +156,7 @@
 
   function grafica(meses) {
     if (!meses.length) return '';
-    var W = Math.max(320, meses.length * 34), H = 190, pl = 34, pr = 40, pt = 14, pb = 28;
+    var W = Math.max(320, meses.length * 46), H = 190, pl = 34, pr = 40, pt = 14, pb = 28;
     var cw = W - pl - pr, ch = H - pt - pb, paso = cw / meses.length, bw = Math.min(22, paso * .62);
     var maxN = Math.max.apply(null, meses.map(function (m) { return m.nuevos; })) || 1;
     var maxA = meses[meses.length - 1].acum || 1;
