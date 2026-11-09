@@ -8385,6 +8385,12 @@ const CF_GENERAL = [
     ['ALERTA_BOT_EMAIL_3', 'Correo 3', 'Opcional.']
     /* 17/07: APP_PRIVADA_URL se mudó al bloque "Enlaces de las apps" (CF_APPS).
        La clave y su uso en el correo de aviso NO cambian. */
+  ] },
+  /* 08/11/2026 · VOTACIÓN y ASISTENCIAS sin conexión: la clave con la que el
+     coordinador baja al teléfono la copia de la base («Prepararme para salir
+     sin señal»). La revisa el CORE (Escaneo_SinRed.gs · esc.copia). */
+  { titulo: '📷 Escáner sin señal', sub: 'La clave que piden las apps de Votación y Asistencias para bajar al teléfono la copia de la base. Entrégala solo a los coordinadores. Si la cambias, los teléfonos que ya la tenían la vuelven a pedir al actualizar la copia.', keys: [
+    ['ESCANER_CLAVE', 'Clave del escáner', 'Números o letras. Hoy: 6 dígitos.']
   ] }
 ];
 const CF_CASA_KEYS = ['CASA_TITULO', 'CASA_INTRO', 'CASA_CIERRE', 'CASA_HASHTAGS', 'CASA_DIRECCION',
