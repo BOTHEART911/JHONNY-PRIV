@@ -2107,7 +2107,10 @@ function bdLotePlantillaBin(X) {
   const ruta = z.FullPaths.find(p => /xl\/worksheets\/sheet1\.xml$/.test(p));
   let xml = new TextDecoder().decode(z.FileIndex[z.FullPaths.indexOf(ruta)].content);
   const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige NO APARECE EN CENSO o MUERTE." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>"${BD_LOTE_MOTIVOS.join(',')}"</formula1></dataValidation></dataValidations>`;
-  const tras = /<(hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|drawing|legacyDrawing|tableParts|extLst)([ >\/])/;
+  /* Excel exige el ORDEN del esquema (CT_Worksheet): dataValidations va antes
+     de todo esto. SheetJS escribe ignoredErrors al final; si la lista queda
+     después, Excel declara el archivo dañado (09/11/2026). */
+  const tras = /<(hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)([ >\/])/;
   xml = tras.test(xml) ? xml.replace(tras, dv + '<$1$2') : xml.replace('</worksheet>', dv + '</worksheet>');
   X.CFB.utils.cfb_add(z, ruta, new TextEncoder().encode(xml));
   return X.CFB.write(z, { fileType: 'zip', type: 'array', compression: true });
