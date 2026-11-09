@@ -77,7 +77,12 @@
     /* 07/11/2026 · Web pública de inscripciones (repo INSCRIPCIONES-JHONNY).
        El botón Enviar de Formularios arma el enlace <esto>#<formulario>.
        Al replicar: la dirección de Pages del repo de la campaña nueva. */
-    INSCRIPCIONES_URL: 'https://botheart911.github.io/JHONNY-INSCRIPCION/'
+    INSCRIPCIONES_URL: 'https://botheart911.github.io/JHONNY-INSCRIPCION/',
+
+    /* 09/11/2026 · Web de los líderes para validar los registros POR CONFIRMAR
+       (repo JHONNY-POSTCONSULTA). Respaldo del {enlace} del botón VALIDACIÓN;
+       el valor real se edita en Configuración → Enlaces (POSTCONSULTA_URL). */
+    POSTCONSULTA_URL: 'https://botheart911.github.io/JHONNY-POSTCONSULTA/'
   };
 
 })(typeof self !== 'undefined' ? self : this);

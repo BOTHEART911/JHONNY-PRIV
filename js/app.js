@@ -1341,6 +1341,7 @@ function bdCardHtml(c) {
       </div>
       ${inact ? '<span class="bd-pill-inact">Inactivo</span>' : `<span class="bd-mun ${bdColor(c.municipio)}">${esc(c.municipio || '—')}</span>`}
     </div>
+    ${bdSelloMotivo(c)}
     <div class="bd-meta">
       <span><span class="bd-k">Residencia</span> ${esc(c.residencia || '—')}</span>
       <span><span class="bd-k">Intención</span> ${esc(c.intencion || '—')}</span>
@@ -1353,6 +1354,17 @@ function bdCardHtml(c) {
       <button class="bd-btn bd-btn-danger" data-a="inactivar" ${inact ? 'disabled' : ''}>Inactivar</button>
     </div>
   </article>`;
+}
+
+/* 09/11/2026 · VALIDACIÓN DE REGISTROS: sello con el motivo de POR CONFIRMAR
+   (NO APARECE EN CENSO / MUERTE) y el fallecimiento confirmado por el líder. */
+function bdSelloMotivo(c) {
+  const m = String(c.motivo || '').toUpperCase();
+  if (!m) return '';
+  const mun = String(c.municipio || '').toUpperCase();
+  if (/FALLECIDO/.test(m)) return `<div class="bd-sello bd-sello-muerte">${esc(m)}</div>`;
+  if (mun !== 'POR CONFIRMAR') return '';
+  return `<div class="bd-sello ${m === 'MUERTE' ? 'bd-sello-muerte' : ''}">Motivo: ${esc(m === 'MUERTE' ? 'POSIBLE FALLECIMIENTO' : m)}</div>`;
 }
 
 async function viewBaseDatos(user) {
@@ -1371,6 +1383,7 @@ async function viewBaseDatos(user) {
         <button class="btn btn-ghost bd-nav-btn" id="bd-dashboard">${I.chart} Dashboard</button>
         <button class="btn btn-ghost bd-nav-btn" id="bd-simulador">${I.sliders} Simulador</button>
         <button class="btn btn-ghost bd-nav-btn bd-nav-vote" id="bd-votacion">${I.vote} Votación</button>
+        <button class="btn btn-ghost bd-nav-btn bd-nav-val" id="bd-validacion" title="Enviar a los líderes el enlace para validar los documentos POR CONFIRMAR">${I.wa} Validación <span class="bd-val-n" data-val-n>0</span></button>
       </div>
       <div class="bd-chips" id="bd-chips">
         ${['Todos',MV.municipio,'Sin consultar','A la espera','Por confirmar','Otros','Inactivos'].map((t,i)=>`<button class="bd-chip ${i===0?'active':''}" data-f="${esc(t)}">${esc(t)} <span class="bd-chip-n" data-n></span></button>`).join('')}
@@ -1399,6 +1412,7 @@ async function viewBaseDatos(user) {
   $('#bd-dashboard').onclick = () => go('dashboard');
   $('#bd-simulador').onclick = () => go('simulador');
   $('#bd-votacion').onclick = () => go('votacion');
+  { const bv = $('#bd-validacion'); if (bv) bv.onclick = () => window.bdValEnviar && bdValEnviar(); }   /* 09/11/2026 */
 
   /* 13/10/2026 · carga única por sesión: la segunda visita pinta al instante
      desde la caché y solo vuelve al servidor si /meta dice que algo cambió. */
@@ -1411,7 +1425,7 @@ async function viewBaseDatos(user) {
     await rapCargar('priv.baseDatos', { caller: BD_ME, act: '1' }, (r) => {
       if (!$('#bd-body')) return;                         // ya salió de la vista
       if (!r || r.ok === false) { if (primera) $('#bd-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
-      BD_ALL = r.items || []; BD_REG_URL = r.registraduriaUrl || '';
+      BD_ALL = r.items || []; BD_REG_URL = r.registraduriaUrl || ''; if (r.pc) window.BD_PC = r.pc;
       BD_LIDERES = r.lideres || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
       if (window.bdActDato) bdActDato(r.act);
       bdBuildIntChips();
@@ -1482,6 +1496,7 @@ async function vivoBd(rev) {
   const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME, act: '1' }, RAP.params()), 'GET', null, SILENCIO);
   if (!r || r.ok === false) return;
   RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
+  if (r.pc) window.BD_PC = r.pc;
   if (!vivoCambio(JSON.stringify(r.items))) { medir('lista-sin-cambio'); return; }
   BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
   if (window.bdActDato) bdActDato(r.act);
@@ -1705,6 +1720,7 @@ function bdApplyFilter() {
   $('#bd-body').innerHTML = `<div class="bd-grid" id="bd-grid"></div>`;
   bdRenderMore();
   if (window.bdTablero) bdTablero();   // 08/11/2026 · conteos de pastillas + tendencia por mes
+  if (window.bdValContar) bdValContar();   /* 09/11/2026 · número del botón VALIDACIÓN */
 }
 function bdRenderMore() {
   const grid = $('#bd-grid'); if (!grid) return;
@@ -1754,7 +1770,7 @@ function bdUpsertCard(card, _prepend) {
   // para caer en su sitio (el más reciente, arriba); no se antepone a ciegas.
   if (nuevo) return bdApplyFilter();
   const node = $(`#bd-grid .bd-card[data-doc="${cssq(card.documento)}"]`);
-  if (node) { const nn = h(bdCardHtml(card)); nn._wired = true; nn.querySelectorAll('.bd-btn').forEach(b => b.onclick = () => bdAccion(b.dataset.a, card.documento)); bdDocCopiable(nn); node.replaceWith(nn); if (window.bdTablero) bdTablero(); }
+  if (node) { const nn = h(bdCardHtml(card)); nn._wired = true; nn.querySelectorAll('.bd-btn').forEach(b => b.onclick = () => bdAccion(b.dataset.a, card.documento)); bdDocCopiable(nn); node.replaceWith(nn); if (window.bdTablero) bdTablero(); if (window.bdValContar) bdValContar(); }
   else bdApplyFilter();   // en memoria pero fuera de la página pintada: repinta
 }
 const normDocJs = s => String(s == null ? '' : s).replace(/\D/g, '');
@@ -1946,6 +1962,12 @@ function bdConsultar(doc, card) {
    Registraduría (sin DEPARTAMENTO/PUESTO/DIRECCION/MESA). Al marcar uno se
    bloquea el área de pegado; al guardar solo se escribe la columna
    MUNICIPIO (H) con ese texto, nada más. */
+/* 09/11/2026 · POR CONFIRMAR exige el motivo. Lo ve el líder en
+   JHONNY-POSTCONSULTA (Validación de registros) y queda en la trazabilidad. */
+const CONS_MOTIVOS = [
+  { v: 'NO APARECE EN CENSO', t: 'No aparece en censo', d: 'La Registraduría no lo encontró: puede estar mal escrito' },
+  { v: 'MUERTE', t: 'Muerte', d: 'La Registraduría lo reporta como fallecido' }
+];
 const CONS_MARCAS = [
   { v: 'POR CONFIRMAR', d: 'Validar con el líder si el documento es correcto' },
   { v: 'A LA ESPERA',   d: 'No aparece aún en el censo de Registraduría' }
@@ -1959,18 +1981,30 @@ async function consMarcas(doc) {
   const lleno = (k) => String(p[k] || '').trim() !== '';
   if (lleno('DEPARTAMENTO') || lleno('PUESTO') || lleno('DIRECCION') || lleno('MESA')) return;  // ya consultado
   const actual = String(p['MUNICIPIO'] || '').trim().toUpperCase();
+  const actualMot = String(p['MOTIVO_CONFIRMAR'] || '').trim().toUpperCase();   /* 09/11/2026 */
 
   box.innerHTML = `<div class="cons-marks">
     <p class="eyebrow" style="margin:14px 0 6px;">O márcalo sin consultar</p>
     ${CONS_MARCAS.map(m => `<button type="button" class="cons-mark ${actual === m.v ? 'on' : ''}" data-m="${esc(m.v)}">
       <span class="cm-box"></span><span class="cm-txt"><b>${esc(m.v)}</b><small>${esc(m.d)}</small></span></button>`).join('')}
+    <div class="cons-motivo" id="cons-motivo" hidden>
+      <p class="eyebrow" style="margin:12px 0 6px;">Motivo (obligatorio)</p>
+      ${CONS_MOTIVOS.map(m => `<button type="button" class="cons-mot ${actualMot === m.v ? 'on' : ''}" data-v="${esc(m.v)}"><span class="cm-box"></span><span class="cm-txt"><b>${esc(m.t)}</b><small>${esc(m.d)}</small></span></button>`).join('')}
+      <p class="small muted" style="margin:6px 2px 0;">El líder de esta persona lo verá en la web de Validación de registros con esta explicación.</p>
+    </div>
     <button class="btn btn-primary btn-block cons-mark-save" id="cons-mk-save">Guardar estado</button>
   </div>`;
 
   const btns = $$('#cons-marks .cons-mark');
+  const mots = $$('#cons-marks .cons-mot');
   const save = $('#cons-mk-save');
+  mots.forEach(b => b.onclick = () => { mots.forEach(x => x.classList.remove('on')); b.classList.add('on'); pintar(); });
+  const motSel = () => { const m = mots.filter(b => b.classList.contains('on'))[0]; return m ? m.dataset.v : ''; };
   const pintar = () => {
     const sel = btns.filter(b => b.classList.contains('on'))[0];
+    const pideMot = !!sel && sel.dataset.m === 'POR CONFIRMAR';
+    const caja = $('#cons-motivo'); if (caja) caja.hidden = !pideMot;
+    save.disabled = pideMot && !motSel();
     const wrap = $('#cons-paste-wrap'), read = $('#cons-read'), ta = $('#cons-paste');
     if (wrap) wrap.classList.toggle('cons-off', !!sel);
     if (ta) ta.disabled = !!sel;
@@ -1989,9 +2023,11 @@ async function consMarcas(doc) {
   save.onclick = async () => {
     const sel = btns.filter(b => b.classList.contains('on'))[0];
     if (!sel) return;
+    const motivo = sel.dataset.m === 'POR CONFIRMAR' ? motSel() : '';
+    if (sel.dataset.m === 'POR CONFIRMAR' && !motivo) return toast('Elige el motivo', 'err');
     saving(save, true);
     try {
-      const r = await api('priv.puestoGuardar', {}, 'POST', { ...auth(), documento: doc, marca: sel.dataset.m });
+      const r = await api('priv.puestoGuardar', {}, 'POST', { ...auth(), documento: doc, marca: sel.dataset.m, motivo });
       saving(save, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Estado guardado', 'ok'); bdUpsertCard(r.card);
@@ -2275,6 +2311,7 @@ async function bdLoteRecargar() {
     const r = await api('priv.baseDatos', Object.assign({ caller: BD_ME, act: '1' }, RAP.params()), 'GET', null, { silent: true });
     if (!r || r.ok === false) return;
     RAP.guardar('priv.baseDatos', r, r.__rapCrudo);
+    if (r.pc) window.BD_PC = r.pc;
     BD_ALL = r.items || []; BD_COLS = r.columnas || []; BD_DASH = r.dash || BD_DASH;
     if (window.bdActDato) bdActDato(r.act);
     bdBuildIntChips(); bdApplyFilter();
@@ -8372,7 +8409,9 @@ const CF_APPS = [
   ['APP_ASISTENCIA_URL', 'App de asistencias', 'El escáner de kiosco de los eventos.', 'ASISTENCIA'],
   ['APP_VOTACION_URL', 'App de votación', 'El escáner de kiosco del día de elecciones.', 'VOTACIÓN'],
   /* 6ª app (17/07/2026): el call center. */
-  ['APP_CENTER_URL', 'App del call center', 'La de los usuarios CALL. Su acceso se configura en la pestaña Call Center.', 'CALL CENTER']
+  ['APP_CENTER_URL', 'App del call center', 'La de los usuarios CALL. Su acceso se configura en la pestaña Call Center.', 'CALL CENTER'],
+  /* 09/11/2026 · web de los líderes para validar los registros POR CONFIRMAR. */
+  ['POSTCONSULTA_URL', 'Validación de registros', 'La de los líderes para validar los documentos POR CONFIRMAR. Es el {enlace} del botón VALIDACIÓN de Base de datos.', 'VALIDACIÓN']
 ];
 
 /* AJUSTE 23/07/2026 · "Otros enlaces" e "Imágenes y marca" salieron de la

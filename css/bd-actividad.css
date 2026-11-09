@@ -27,3 +27,21 @@ html.oscuro .bd-chips-act2 { background: rgba(var(--brand-rgb), .12); }
 
 @media (max-width: 640px) { .bd-chip-act2 { max-width: 240px; } }
 @media (prefers-reduced-motion: reduce) { .bda-car { transition: none; } }
+
+/* 09/11/2026 · VALIDACIÓN DE REGISTROS (bd-validacion.js + motivo en Consultar) */
+.bd-sello { margin: 8px 0 2px; padding: 6px 10px; border-radius: 10px; background: #FFF4E0; color: #92400E; font-size: .76rem; font-weight: 700; letter-spacing: .2px; }
+.bd-sello-muerte { background: #EEF0F3; color: #374151; }
+:root[data-theme="dark"] .bd-sello { background: #3A2A10; color: #FCD9A0; }
+:root[data-theme="dark"] .bd-sello-muerte { background: #1F2937; color: #D1D5DB; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bd-sello { background: #3A2A10; color: #FCD9A0; } :root:not([data-theme="light"]) .bd-sello-muerte { background: #1F2937; color: #D1D5DB; } }
+.bd-nav-val { color: #128C3E; }
+.bd-nav-val svg { width: 17px; height: 17px; }
+.bd-val-n { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: #F59E0B; color: #fff; font-size: .72rem; font-weight: 800; line-height: 1.5; }
+.bd-val-n.cero { background: #9CA3AF; }
+.cons-motivo .cons-mot { width: 100%; display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 11px 13px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); }
+.cons-mot .cm-box { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 1px; border: 2px solid var(--line); border-radius: 50%; }
+.cons-mot .cm-txt b { display: block; font-family: var(--font-display); font-size: .86rem; letter-spacing: .3px; }
+.cons-mot .cm-txt small { display: block; margin-top: 2px; font-size: .76rem; color: var(--muted); line-height: 1.35; }
+.cons-mot.on { border-color: #F59E0B; background: #FFF7E6; }
+.cons-mot.on .cm-box { border-color: #F59E0B; background: radial-gradient(#F59E0B 45%, transparent 50%); }
+:root[data-theme="dark"] .cons-mot.on { background: #3A2A10; }

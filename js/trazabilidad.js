@@ -34,7 +34,9 @@
     voto:        { t: 'Votación',       c: 'tz-c-voto',  i: '<path d="m9 12 2 2 4-4"/><path d="M5 7h14l-1 13H6Z"/><path d="M8 7V4h8v3"/>' },
     comercio:    { t: 'Comercios',      c: 'tz-c-com',   i: '<path d="M3 9 5 4h14l2 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/>' },
     resena:      { t: 'Reseñas',        c: 'tz-c-res',   i: '<path d="m12 2 3 6.5 7 .8-5.2 4.7 1.5 7L12 17.4 5.7 21l1.5-7L2 9.3l7-.8Z"/>' },
-    seguimiento: { t: 'Seguimiento',    c: 'tz-c-seg',   i: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>' }
+    seguimiento: { t: 'Seguimiento',    c: 'tz-c-seg',   i: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>' },
+    /* 09/11/2026 · validación de registros (marca con motivo, visto bueno del líder, corrección de documento) */
+    validacion:  { t: 'Validación',     c: 'tz-c-seg',   i: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m8 12 2.5 2.5L16 9"/>' }
   };
   const tzIco = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${(TZ_TIPOS[k] || TZ_TIPOS.alta).i}</svg>`;
   const TZ_MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
