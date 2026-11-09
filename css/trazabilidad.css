@@ -42,6 +42,16 @@
 /* 08/11/2026 · antes '.tz-sheet { position: relative; }' le quitaba el position: fixed de .sheet:
    la hoja de Detalles se pintaba al final de la lista (miles de tarjetas) y no se veía.
    Con fixed sigue sirviendo de contenedor para la vista previa de la Constancia. */
+/* 08/11/2026 · barra de acciones al pie de la ficha (Editar · Inactivar · Eliminar), visible en las dos pestañas */
+.tz-acc { position: sticky; bottom: calc(-1 * max(22px, env(safe-area-inset-bottom))); z-index: 2;
+  display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+  margin: 16px -22px calc(-1 * max(22px, env(safe-area-inset-bottom)));
+  padding: 12px 22px max(14px, env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -8px 18px rgba(0,0,0,.06); }
+.tz-acc[hidden] { display: none; }
+.tz-acc .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 16px; font-size: .88rem; }
+.tz-acc .btn svg { width: 17px; height: 17px; flex: 0 0 17px; }
+.tz-acc .btn[disabled] { opacity: .55; }
 .btn-wa { background: #25D366; color: #fff; border: 0; }
 .btn-wa svg { width: 18px; height: 18px; }
 html.oscuro .tz-ico { background: var(--surface); }
@@ -49,6 +59,8 @@ html.oscuro .tz-e-pend { background: #3a2a0c; color: #F5C26B; }
 @media (max-width: 560px) {
   .tz-const { margin-left: 0; width: 100%; justify-content: center; }
   .tz-kpis { grid-template-columns: repeat(3, 1fr); }
+  .tz-acc { justify-content: stretch; }
+  .tz-acc .btn { flex: 1 1 0; padding: 10px 8px; }
 }
 
 /* ============ ANÁLISIS → RESEÑAS de Solicitudes y Gestiones (07/11/2026) ============ */

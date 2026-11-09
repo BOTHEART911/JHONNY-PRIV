@@ -77,7 +77,9 @@
         <button class="btn btn-primary tz-const" id="tz-const" disabled>${I.download} Constancia de gestión</button>
       </div>
       <div id="tz-body"><div class="tz-kpis">${Array(4).fill('<div class="tz-skel"></div>').join('')}</div>
-        <div class="tz-line">${Array(4).fill('<div class="tz-item tz-skel-i"><i></i><div><b></b><span></span></div></div>').join('')}</div></div>`, 'sheet-xl tz-sheet');
+        <div class="tz-line">${Array(4).fill('<div class="tz-item tz-skel-i"><i></i><div><b></b><span></span></div></div>').join('')}</div></div>
+      ${tzAccionesHtml(card)}`, 'sheet-xl tz-sheet');
+    tzAccionesCablear(doc);
     $$('.tz-tab').forEach(b => b.onclick = () => { if (!TZ.data) return; TZ.tab = b.dataset.tab; $$('.tz-tab').forEach(x => x.classList.toggle('on', x === b)); tzPintar(); });
     $('#tz-const').onclick = () => tzConstancia();
     const t0 = performance.now();
@@ -112,6 +114,7 @@
     const body = $('#tz-body'); if (!body || !TZ || !TZ.data) return;
     const d = TZ.data, p = d.persona || {};
     const cb = $('#tz-const'); if (cb) cb.disabled = !!d.viejo;
+    tzAccionesEstado(p);
     if (TZ.tab === 'datos') return tzDatos(body, p, d);
     const items = d.items || [];
     const R = d.resumen || {};
@@ -154,18 +157,38 @@
     const fotoUrl = bdFotoUrl(p['FOTO']);
     const doc = TZ.doc;
     body.innerHTML = `${fotoUrl ? `<div class="det-foto"><img src="${esc(fotoUrl)}" alt="Foto" class="zoomable" onerror="this.closest('.det-foto').remove()" /></div>` : ''}
-      <div class="det-list">${keys.map(k => `<div class="det-row"><span>${esc(k.replace(/_/g, ' '))}</span><b>${esc(p[k] || '—')}</b></div>`).join('')}</div>
-      <div class="stack" style="margin-top:16px;">
-        <button class="btn btn-primary btn-block" id="det-edit">Editar</button>
-        <button class="btn btn-quiet btn-block bd-btn-danger" id="det-inact" ${String(p['ESTADO']).toUpperCase() === 'INACTIVO' ? 'disabled' : ''}>Inactivar</button>
-        <button class="btn btn-quiet btn-block bd-btn-danger" id="det-elim">Eliminar</button>
-      </div>`;
+      <div class="det-list">${keys.map(k => `<div class="det-row"><span>${esc(k.replace(/_/g, ' '))}</span><b>${esc(p[k] || '—')}</b></div>`).join('')}</div>`;
     const fz = body.querySelector('.det-foto img'); if (fz) fz.onclick = () => zoomImagen(fotoUrl);
-    const fila = () => BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc));
-    $('#det-edit').onclick = () => { closeLayer(); bdEditar(doc); };
-    $('#det-inact').onclick = () => { closeLayer(); bdInactivar(doc, fila()); };
-    $('#det-elim').onclick = () => { closeLayer(); bdEliminar(doc, fila()); };
-    if (window.permBarrer) try { permBarrer(document); } catch (e) {}
+  }
+
+  /* 08/11/2026 · Acciones de la ficha (Editar · Inactivar · Eliminar).
+     Desde la entrega de Trazabilidad solo salían dentro de la pestaña Datos y la
+     ficha abre en Trazabilidad: no se veían. Ahora van en una barra fija al pie
+     de la hoja, pintadas al instante con lo que ya se sabe de la tarjeta, en las
+     dos pestañas. Mismos ids → mismas reglas de permisos (permisos.js). */
+  function tzAccionesHtml(card) {
+    const inact = String(card.estado || '').toUpperCase() === 'INACTIVO';
+    return `<div class="tz-acc" id="tz-acc">
+        <button class="btn btn-primary" id="det-edit">${I.pencil}<span>Editar</span></button>
+        <button class="btn btn-quiet bd-btn-danger" id="det-inact" ${inact ? 'disabled' : ''}>${I.lock}<span>${inact ? 'Inactivo' : 'Inactivar'}</span></button>
+        <button class="btn btn-quiet bd-btn-danger" id="det-elim">${I.trash}<span>Eliminar</span></button>
+      </div>`;
+  }
+  function tzAccionesCablear(doc) {
+    const fila = () => (typeof BD_ALL !== 'undefined' ? BD_ALL : []).find(x => normDocJs(x.documento) === normDocJs(doc));
+    const e = $('#det-edit'), i = $('#det-inact'), x = $('#det-elim');
+    if (e) e.onclick = () => { closeLayer(); bdEditar(doc); };
+    if (i) i.onclick = () => { closeLayer(); bdInactivar(doc, fila()); };
+    if (x) x.onclick = () => { closeLayer(); bdEliminar(doc, fila()); };
+    if (window.permBarrer) try { permBarrer(document); } catch (er) {}
+    const bar = $('#tz-acc');   // si el rol no tiene ninguna, la barra no ocupa espacio
+    if (bar && ![e, i, x].some(b => b && !b.hidden)) bar.hidden = true;
+  }
+  /* El estado real llega con los datos: si cambió, se ajusta Inactivar sin repintar */
+  function tzAccionesEstado(p) {
+    const i = $('#det-inact'); if (!i || i.hidden || !p || !p['ESTADO']) return;
+    const inact = String(p['ESTADO']).toUpperCase() === 'INACTIVO';
+    i.disabled = inact; const sp = i.querySelector('span'); if (sp) sp.textContent = inact ? 'Inactivo' : 'Inactivar';
   }
 
   /* ===================================================== CONSTANCIA (PDF)
