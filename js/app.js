@@ -8446,7 +8446,9 @@ const CF_INICIO_KEYS = ['INICIO_IMAGEN_DRIVE', 'INICIO_REEL_URL'];
    La fila puede seguir en la hoja CONFIG como respaldo; aqui se oculta para
    que no reaparezca en "Otros ajustes" y nadie la edite creyendo que sirve. */
 const CF_OCULTAS = ['INICIO_IMAGEN_ID', 'ALERTA_BOT_FALLOS', 'ALERTA_BOT_ULTIMA_ALERTA', 'BOT_SILENCIADO', 'REFIERE_URL',
-  'AGENDA_CANDIDATO_NOMBRE'];
+  'AGENDA_CANDIDATO_NOMBRE',
+  /* 08/11/2026 · tienen su sección propia (Vistas de la app pública) */
+  'PUB_VISTAS_APAGADAS', 'PUB_VISTAS_POR', 'PUB_VISTAS_FECHA'];
 
 /* ---------- MARCA DE CAMPANA (27/07/2026 · Fase 2) ----------
    Las llaves que hacen replicable el ecosistema. Tienen tarjeta propia en
@@ -8594,6 +8596,8 @@ function cfPintaGeneral() {
   const secciones = [
     { titulo: 'Enlaces de las apps', sub: 'Las 6 apps del proyecto. El botón Enviar abre WhatsApp con el mensaje para compartir esa app.', inner: cfAppsInner() },
     { titulo: 'Inicio de la app pública', sub: 'La imagen y el video que ve la gente al abrir la app.', inner: cfInicioInner() },
+    /* 08/11/2026 · vistas encendibles de la app pública (js/vistas-pub.js) */
+    ...(window.VISTAS_PUB ? [{ titulo: 'Vistas de la app pública', sub: 'Apaga lo que tu municipio no usa: no sale en el Inicio de la app pública y por enlace directo no abre. Apagar no borra datos. Queda registrado quién y cuándo.', inner: VISTAS_PUB.inner(cfg) }] : []),
     { titulo: 'Agenda', sub: 'Datos del candidato para las notificaciones de la Agenda.', inner: cfAgendaInner() }
   ].concat(gruposSec, extraSec, [
     { titulo: 'Plantilla rápida · Compartir App', sub: '', inner: cfCompartirInner() }
@@ -8610,6 +8614,7 @@ function cfPintaGeneral() {
   cfAccBind();
   cfAppsBind();
   cfInicioBind();
+  if (window.VISTAS_PUB) VISTAS_PUB.bind();   /* 08/11/2026 */
   const wa = $('#cf-k-AGENDA_CANDIDATO_WA'); if (wa) onlyDigits(wa);
   cfPintado();   /* 02/08: reabre el bloque y devuelve lo que estabas escribiendo */
 }

@@ -2702,3 +2702,9 @@ body.wide-xl .an-tabs { max-width: 640px; }
 .av.av-zoom { cursor: zoom-in; transition: transform .15s; }
 .av.av-zoom:hover { transform: scale(1.06); }
 .av.av-zoom:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 08/11/2026 · Configuración → General → Vistas de la app pública */
+.cfg-vp { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.cfg-vp-fila { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, transparent); }
+.cfg-vp-fila.off { opacity: .72; }
+.cfg-vp-d { font-size: .74rem; color: var(--muted); padding-left: 49px; line-height: 1.3; }
