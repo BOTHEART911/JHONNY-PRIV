@@ -14,6 +14,13 @@
  *    chat de la persona.
  *  · Respaldo: si el CORE desplegado aún no tiene la ruta, Detalles funciona
  *    como antes (priv.persona) y avisa.
+ *  · 09/11/2026 · PRECARGA: las tarjetas que se ven (y las que están por
+ *    verse) piden su trazabilidad de fondo, de a 12 en UN viaje
+ *    (priv.trazabilidadLote, cola de fondo de red.js: máx. 2 a la vez, se
+ *    descarta al cambiar de vista). Tocar Detalles abre con todo al instante;
+ *    si el lote de esa tarjeta va en camino, se espera ESE viaje (no se lanza
+ *    otro); al presionar (pointerdown) una tarjeta sin precarga, el viaje sale
+ *    ~150 ms antes y el toque lo hereda. CORE sin la ruta → no precarga.
  * Depende de app.js (api, rapCargar, openSheet, closeLayer, esc, $, $$, toast,
  *   bdColor, bdFotoUrl, zoomImagen, bdEditar, bdInactivar, bdEliminar,
  *   ldiCargarPdf, ldiLogo, ldiHex, ldiPdfTx, BD_ALL, normDocJs, auth).
@@ -59,8 +66,99 @@
   let TZ = null;   // { doc, data, filtro }
   /* Medición de pantalla (regla 15): window.TZ_TIEMPOS() en la consola */
   const TZ_MED = [];
-  function tzMedir(n, t0) { TZ_MED.push({ n, ms: Math.round(performance.now() - t0), t: Date.now() }); if (TZ_MED.length > 60) TZ_MED.shift(); }
+  function tzMedir(n, t0, extra) {
+    const ms = Math.round(performance.now() - t0);
+    TZ_MED.push(Object.assign({ n, ms, t: Date.now() }, extra || {})); if (TZ_MED.length > 60) TZ_MED.shift();
+    try { if (window.RED && RED.pantalla) RED.pantalla(n, ms); } catch (e) {}
+  }
   window.TZ_TIEMPOS = () => TZ_MED.slice();
+
+  /* ======================================================== PRECARGA (09/11)
+     Cola de documentos visibles → lotes de 12 por la cola de fondo. Lo que
+     llega se guarda en la caché de sesión con la MISMA clave que usa Detalles
+     (priv.trazabilidad:<doc>) y con su rv: al abrir se pinta de ahí y solo se
+     revalida si un canal cambió. */
+  const TZP = { pend: new Map(), cola: [], t: 0, off: false, io: null, lotes: 0 };
+  const tzpClave = d => 'priv.trazabilidad:' + d;
+  function tzpUsuario() { try { RAP.setUsuario((getActive() || {}).documento || ''); } catch (e) {} }
+  function tzpHay(d) { tzpUsuario(); return !!RAP.tomar(tzpClave(d)); }
+  function tzpPuede() {
+    if (TZP.off) return false;
+    if (window.SINRED && SINRED.enLinea && !SINRED.enLinea()) return false;
+    try { if (window.permOk && !permOk('bd.detalles')) return false; } catch (e) {}
+    return !!(typeof BD_ME !== 'undefined' && BD_ME);
+  }
+  function tzpPedir(doc) {
+    const d = normDocJs(doc);
+    if (!d || TZP.pend.has(d) || TZP.cola.includes(d) || tzpHay(d)) return;
+    TZP.cola.push(d);
+    clearTimeout(TZP.t); TZP.t = setTimeout(tzpVaciar, 200);
+  }
+  function tzpVaciar() {
+    if (!tzpPuede()) { TZP.cola = []; return; }
+    while (TZP.cola.length) {
+      const docs = TZP.cola.splice(0, 12).filter(d => !TZP.pend.has(d) && !tzpHay(d));
+      if (!docs.length) continue;
+      tzpLote(docs);
+    }
+  }
+  /* Un lote por la cola de fondo */
+  function tzpLote(docs) {
+    const t0 = performance.now();
+    let listo; const prom = new Promise(r => { listo = r; });
+    docs.forEach(d => TZP.pend.set(d, prom));
+    const fin = () => { docs.forEach(d => { if (TZP.pend.get(d) === prom) TZP.pend.delete(d); }); listo(); };
+    TZP.lotes++;
+    api('priv.trazabilidadLote', Object.assign({ docs: docs.join(',') }, auth()), 'GET', null, SILENCIO)
+      .then(r => {
+        tzpUsuario();
+        if (r && r.ok && r.mapa) Object.keys(r.mapa).forEach(d => { const x = r.mapa[d]; if (x && x.ok !== false) RAP.guardar(tzpClave(d), x, x); });
+        tzMedir('precarga', t0, { docs: docs.length, llegaron: r && r.mapa ? Object.keys(r.mapa).length : 0 });
+      })
+      .catch(e => { if (/no reconocida/i.test(String(e && e.message))) TZP.off = true; })   // CORE sin la ruta: no se insiste
+      .finally(fin);
+    return prom;
+  }
+  /* Las tarjetas que se ven (y 1 pantalla más abajo) */
+  function tzpObservar() {
+    if (!('IntersectionObserver' in window) || TZP.off) return;
+    if (!TZP.io) TZP.io = new IntersectionObserver(ents => {
+      ents.forEach(en => { if (en.isIntersecting) { TZP.io.unobserve(en.target); tzpPedir(en.target.dataset.doc); } });
+    }, { rootMargin: '0px 0px 600px 0px' });
+    document.querySelectorAll('#bd-grid .bd-card[data-doc]:not([data-tzp])').forEach(c => {
+      c.setAttribute('data-tzp', '1');
+      TZP.io.observe(c);
+      const b = c.querySelector('.bd-btn[data-a="detalles"]');
+      /* presionar = intención: si no hay precarga ni lote en camino, la MISMA
+         lectura que hará Detalles sale ya (primer plano) y el toque la hereda
+         (red.js: misma lectura en vuelo → se adopta) */
+      if (b) b.addEventListener('pointerdown', () => {
+        const d = normDocJs(c.dataset.doc);
+        if (!d || TZP.pend.has(d) || tzpHay(d) || (window.SINRED && SINRED.enLinea && !SINRED.enLinea())) return;
+        /* silenciosa (no levanta el escudo de la capa 12: el toque debe pasar)
+           y sin cola de fondo (opts.ya): sale de inmediato */
+        api('priv.trazabilidad', Object.assign({ documento: String(c.dataset.doc) }, auth(), RAP.params()), 'GET', null, { silent: true, ya: true })
+          .then(r => { if (r && r.ok !== false && !tzpHay(d)) { tzpUsuario(); RAP.guardar(tzpClave(d), r, r.__rapCrudo || r); } })
+          .catch(() => {});
+      }, { passive: true });
+    });
+  }
+  /* Enganche: cada tanda de tarjetas pintada (bdRenderMore) y cada tarjeta
+     reemplazada (bdUpsertCard) se observa; al cambiar de vista se suelta todo. */
+  function tzpEnganchar() {
+    ['bdRenderMore', 'bdUpsertCard'].forEach(n => {
+      const f = window[n]; if (typeof f !== 'function' || f.__tzp) return;
+      const g = function () { const r = f.apply(this, arguments); try { tzpObservar(); } catch (e) {} return r; };
+      g.__tzp = true; window[n] = g;
+    });
+    if (window.RED && RED.nuevaVista && !RED.nuevaVista.__tzp) {
+      const nv = RED.nuevaVista;
+      RED.nuevaVista = function () { TZP.cola = []; clearTimeout(TZP.t); TZP.pend.clear(); if (TZP.io) { TZP.io.disconnect(); TZP.io = null; } return nv.apply(this, arguments); };
+      RED.nuevaVista.__tzp = true;
+    }
+  }
+  tzpEnganchar();
+  window.TZ_PRECARGA = () => ({ lotes: TZP.lotes, pendientes: TZP.pend.size, cola: TZP.cola.length, apagada: TZP.off });
 
   async function tzDetalles(doc) {
     const card = (typeof BD_ALL !== 'undefined' ? BD_ALL : []).find(x => normDocJs(x.documento) === normDocJs(doc)) || { documento: doc };
@@ -85,13 +183,31 @@
     $$('.tz-tab').forEach(b => b.onclick = () => { if (!TZ.data) return; TZ.tab = b.dataset.tab; $$('.tz-tab').forEach(x => x.classList.toggle('on', x === b)); tzPintar(); });
     $('#tz-const').onclick = () => tzConstancia();
     const t0 = performance.now();
+    const nd = normDocJs(doc);
+    /* 09/11/2026 · si el lote de esta tarjeta va en camino, se espera ESE
+       viaje (tope 6 s: si se cortó, se pide suelto) */
+    const enCamino = TZP.pend.get(nd);
+    if (enCamino && !tzpHay(nd)) {
+      await Promise.race([enCamino, new Promise(r => setTimeout(r, 6000))]);
+      if (TZ !== yo) return;
+    }
     try {
-      await rapCargar('priv.trazabilidad', Object.assign({ documento: String(doc) }, auth()), (r) => {
+      await rapCargar('priv.trazabilidad', Object.assign({ documento: String(doc) }, auth()), (r, desdeCache) => {
         if (TZ !== yo || !$('#tz-body')) return;
         if (!r || r.ok === false) { if (!yo.data) $('#tz-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
+        const primera = !yo.data;
         yo.data = r; tzPintar();
-        tzMedir('trazabilidad', t0);
-      }, 'priv.trazabilidad:' + normDocJs(doc));
+        if (primera) tzMedir('trazabilidad', t0, { cache: !!desdeCache, espero: !!enCamino });
+        /* la precarga trae hasta 120 hitos: si hay más, el resto llega de fondo */
+        if (r.corto && !yo.completo) {
+          yo.completo = true;
+          api('priv.trazabilidad', Object.assign({ documento: String(doc) }, auth(), RAP.params()), 'GET', null, SILENCIO).then(f => {
+            if (!f || f.ok === false) return;
+            tzpUsuario(); RAP.guardar(tzpClave(nd), f, f.__rapCrudo || f);
+            if (TZ === yo) { yo.data = f; tzPintar(); }
+          }).catch(() => {});
+        }
+      }, tzpClave(nd));
     } catch (e) {
       if (TZ !== yo) return;
       if (/no reconocida/i.test(String(e && e.message))) return tzRespaldo(doc, yo);   // CORE viejo desplegado

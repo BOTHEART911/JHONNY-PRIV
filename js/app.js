@@ -105,7 +105,7 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
   let json;
   try {
     json = await RED.pedir(API_URL, action, Object.assign({ dev: VIVO_DEV }, params),
-      { metodo: method, cuerpo: method === 'POST' ? (body || {}) : null, fondo: callado && RED.esLectura(action) });
+      { metodo: method, cuerpo: method === 'POST' ? (body || {}) : null, fondo: callado && RED.esLectura(action) && !opts.ya });   /* 09/11 · opts.ya: silenciosa pero sin cola (la intención de tocar Detalles) */
   } catch (e) {
     if (!callado) loaderOff();
     if (e && e.cortado) return new Promise(() => {});

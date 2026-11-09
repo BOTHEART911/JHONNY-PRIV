@@ -51,6 +51,8 @@
    'priv.liderBitacoraInforme ' +
    /* 07/11/2026 · Formularios (solo lectura) */
    'priv.formularios priv.formRegistros priv.trazabilidad ' +
+   /* 09/11/2026 · precarga de Detalles (solo lectura) */
+   'priv.trazabilidadLote ' +
    /* 08/11/2026 · pendientes sin conexión (revisar documentos, solo lectura) */
    'pub.liderPendRevisar priv.bdPendRevisar')
     .split(/\s+/).forEach(function (a) { if (a) LECTURAS[a] = true; });
