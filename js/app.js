@@ -1373,7 +1373,7 @@ async function viewBaseDatos(user) {
         <button class="btn btn-ghost bd-nav-btn bd-nav-vote" id="bd-votacion">${I.vote} Votación</button>
       </div>
       <div class="bd-chips" id="bd-chips">
-        ${['Todos',MV.municipio,'Sin consultar','A la espera','Por confirmar','Otros','Inactivos'].map((t,i)=>`<button class="bd-chip ${i===0?'active':''}" data-f="${esc(t)}">${esc(t)}</button>`).join('')}
+        ${['Todos',MV.municipio,'Sin consultar','A la espera','Por confirmar','Otros','Inactivos'].map((t,i)=>`<button class="bd-chip ${i===0?'active':''}" data-f="${esc(t)}">${esc(t)} <span class="bd-chip-n" data-n></span></button>`).join('')}
       </div>
       <div class="bd-chips bd-chips-int" id="bd-chips-int"></div>
       <div class="bd-lidbar">
@@ -1387,6 +1387,7 @@ async function viewBaseDatos(user) {
           <button class="btn btn-ghost" id="bd-subir">${I.upload} Subir</button>
         </div>
       </div>
+      <div class="bd-tend" id="bd-tend" hidden></div>
       <div class="bd-count" id="bd-count"></div>
       <div id="bd-body">${loadingBox('Cargando registros…')}</div>
       <div class="center" id="bd-more" style="margin-top:12px;"></div>
@@ -1651,6 +1652,7 @@ function bdBuildIntChips() {
      tenía marcado; si no, un refresco de fondo le borraría el filtro de la
      pantalla (BD_INT sí lo conserva, pero el botón se veía apagado). */
   $$('#bd-chips-int .bd-chip-int').forEach(ch => ch.classList.toggle('active', BD_INT.has(ch.dataset.int)));
+  if (window.bdTablero) bdTablero();   // 08/11/2026 · el número de cada intención respeta los demás filtros
 }
 
 /* Milisegundos de FECHA_REGISTRO (dd/MM/yyyy HH:mm:ss). Sin fecha → 0 (el más
@@ -1660,32 +1662,42 @@ function bdRegMs(c) {
   if (!m) return 0;
   return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() || 0;
 }
+/* 08/11/2026 · Las reglas de cada filtro quedan en dos funciones para que la
+   lista, los conteos de las pastillas y la tendencia por mes (bd-tablero.js)
+   cuenten EXACTAMENTE lo mismo. bdPasaChip = pastilla de municipio/estado;
+   bdPasaResto = búsqueda, líder e intención (sinInt: sin mirar intención). */
+function bdPasaChip(c, f) {
+  if (f === 'Inactivos') return c.estado === 'INACTIVO';
+  if (c.estado === 'INACTIVO') return false;            /* ocultos salvo en pestaña Inactivos */
+  const mun = String(c.municipio || '').trim().toUpperCase();
+  if (f === MV.municipio) return MV.esMunicipio(mun);
+  if (f === 'Sin consultar') return mun === 'SIN CONSULTAR';
+  if (f === 'A la espera') return mun === 'A LA ESPERA';
+  if (f === 'Por confirmar') return mun === 'POR CONFIRMAR';
+  if (f === 'Otros') return !(MV.esMunicipio(mun) || ['SIN CONSULTAR','A LA ESPERA','POR CONFIRMAR'].indexOf(mun) !== -1);
+  return true;                                          // Todos
+}
+function bdPasaResto(c, q, sinInt) {
+  if (!sinInt && BD_INT.size && !BD_INT.has(String(c.intencion || '').trim())) return false;
+  if (BD_LID === 'SIN') { if (String(c.referencia || '')) return false; }
+  else if (BD_LID && String(c.referencia || '') !== String(BD_LID)) return false;
+  if (q) {
+    const hay = (String(c.nombre||'') + ' ' + String(c.documento||'') + ' ' + String(c.residencia||'')).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+function bdQ() { return (($('#bd-q') || {}).value || '').trim().toLowerCase(); }
 function bdApplyFilter() {
-  const q = (($('#bd-q') || {}).value || '').trim().toLowerCase();
+  const q = bdQ();
   const f = bdActiveFilter();
-  BD_FILT = BD_ALL.filter(c => {
-    if (f === 'Inactivos') { if (c.estado !== 'INACTIVO') return false; }
-    else if (c.estado === 'INACTIVO') { /* ocultos salvo en pestaña Inactivos */ return false; }
-    const mun = String(c.municipio || '').trim().toUpperCase();
-    if (f === MV.municipio && !MV.esMunicipio(mun)) return false;
-    if (f === 'Sin consultar' && mun !== 'SIN CONSULTAR') return false;
-    if (f === 'A la espera' && mun !== 'A LA ESPERA') return false;
-    if (f === 'Por confirmar' && mun !== 'POR CONFIRMAR') return false;
-    if (f === 'Otros' && (MV.esMunicipio(mun) || ['SIN CONSULTAR','A LA ESPERA','POR CONFIRMAR'].indexOf(mun) !== -1)) return false;
-    if (BD_INT.size && !BD_INT.has(String(c.intencion || '').trim())) return false;
-    if (BD_LID === 'SIN') { if (String(c.referencia || '')) return false; }
-    else if (BD_LID && String(c.referencia || '') !== String(BD_LID)) return false;
-    if (q) {
-      const hay = (String(c.nombre||'') + ' ' + String(c.documento||'') + ' ' + String(c.residencia||'')).toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  BD_FILT = BD_ALL.filter(c => bdPasaChip(c, f) && bdPasaResto(c, q));
   BD_FILT.sort((a, b) => bdRegMs(b) - bdRegMs(a));   // 21/07 (2ª): de la más RECIENTE a la más antigua (sort estable → empates conservan orden de hoja)
   BD_SHOWN = 0;
   $('#bd-count').textContent = `${BD_FILT.length.toLocaleString('es-CO')} registro(s)`;
   $('#bd-body').innerHTML = `<div class="bd-grid" id="bd-grid"></div>`;
   bdRenderMore();
+  if (window.bdTablero) bdTablero();   // 08/11/2026 · conteos de pastillas + tendencia por mes
 }
 function bdRenderMore() {
   const grid = $('#bd-grid'); if (!grid) return;
@@ -1735,7 +1747,7 @@ function bdUpsertCard(card, _prepend) {
   // para caer en su sitio (el más reciente, arriba); no se antepone a ciegas.
   if (nuevo) return bdApplyFilter();
   const node = $(`#bd-grid .bd-card[data-doc="${cssq(card.documento)}"]`);
-  if (node) { const nn = h(bdCardHtml(card)); nn._wired = true; nn.querySelectorAll('.bd-btn').forEach(b => b.onclick = () => bdAccion(b.dataset.a, card.documento)); bdDocCopiable(nn); node.replaceWith(nn); }
+  if (node) { const nn = h(bdCardHtml(card)); nn._wired = true; nn.querySelectorAll('.bd-btn').forEach(b => b.onclick = () => bdAccion(b.dataset.a, card.documento)); bdDocCopiable(nn); node.replaceWith(nn); if (window.bdTablero) bdTablero(); }
   else bdApplyFilter();   // en memoria pero fuera de la página pintada: repinta
 }
 const normDocJs = s => String(s == null ? '' : s).replace(/\D/g, '');
