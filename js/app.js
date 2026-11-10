@@ -66,7 +66,7 @@ const onlyDig = s => String(s || '').replace(/\D/g, '');
 
 /* 10/11/2026 · red de seguridad: un texto crudo de red ("Failed to fetch", "Sin conexión…")
    que llegue a un toast se traduce al aviso claro de falla-red.js */
-function toast(msg, kind = '') { if (kind === 'err' && window.FALLA && (FALLA.RAW_RED.test(String(msg)) || /^(Tiempo de espera agotado|Respuesta de Google no v[aá]lida|Respuesta no v[aá]lida del servidor)$/.test(String(msg)))) msg = FALLA.txt(); const t = h(`<div class="toast ${kind}">${esc(msg)}</div>`); layer.appendChild(t); setTimeout(() => t.remove(), 3200); }
+function toast(msg, kind = '') { if (kind === 'err' && window.FALLA && (FALLA.RAW_RED.test(String(msg)) || /^(Tiempo de espera agotado|Respuesta de Google no v[aá]lida|Respuesta no v[aá]lida del servidor)$/.test(String(msg)))) msg = FALLA.txt(); const t = h(`<div class="toast ${kind}">${esc(msg)}</div>`); layer.appendChild(t); setTimeout(() => t.remove(), Math.max(3200, String(msg).length * 55)); }
 
 /* ---------- Cliente API ---------- */
 let _apiActivas = 0;
@@ -102,17 +102,33 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
   if (API_URL.startsWith('PEGA_AQUI')) { toast('Falta configurar la URL del backend', 'err'); throw new Error('API_URL sin configurar'); }
   const callado = !!opts.silent;
   /* 08/11/2026 · sin conexión: lo que escribe se avisa al instante (no espera 60 s) */
-  /* 10/11/2026 · también las lecturas: sin señal se avisa al instante (sin esperar los reintentos) */
-  if (window.SINRED && !SINRED.enLinea() && !opts.forzar) { const e = new Error('Sin conexión: esto necesita señal'); e.red = true; if (window.FALLA) FALLA.anotar(e, action); throw e; }
+  /* 10/11/2026 · SIN SEÑAL (sin-red-vistas.js): las lecturas de vista salen de
+     la copia guardada en este equipo; las escrituras de la lista quedan como
+     pendientes por subir (rid fijo); lo demás se avisa al instante. */
+  const lectura = RED.esLectura(action);
+  const yoDoc = (getActive() || {}).documento || '';
+  const conCopia = lectura && (!callado || opts.ya) && window.SRV && SRV.copiaAplica(action);
+  const deCopia = async () => { const c = await SRV.copiaTomar(yoDoc, action, params); return c ? SRV.desdeCopia(c) : null; };
+  if (window.SINRED && !SINRED.enLinea() && !opts.forzar) {
+    if (conCopia) { const d = await deCopia(); if (d != null) return d; }
+    if (action === 'priv.contactoBuscar' && window.SRV) { const r = await SRV.buscarLocal(yoDoc, params.q); if (r) return r; }
+    if (!lectura && window.SRV && SRV.pendAplica(action) && !opts.sinPend) {
+      const it = SRV.pendAgregar(yoDoc, action, params, method, body);
+      if (it) { const pe = new Error(''); pe.pendiente = true; pe.red = true; pe.que = SRV.pendQue(action); pe.message = FALLA.txt(pe); if (window.FALLA) FALLA.anotar(pe, action); throw pe; }
+    }
+    const e = new Error('Sin conexión: esto necesita señal'); e.red = true; if (window.FALLA) FALLA.anotar(e, action); throw e;
+  }
   if (!callado) loaderOn();
   let json;
   try {
     json = await RED.pedir(API_URL, action, Object.assign({ dev: VIVO_DEV }, params),
-      { metodo: method, cuerpo: method === 'POST' ? (body || {}) : null, fondo: callado && RED.esLectura(action) && !opts.ya });   /* 09/11 · opts.ya: silenciosa pero sin cola (la intención de tocar Detalles) */
+      { metodo: method, cuerpo: method === 'POST' ? (body || {}) : null, fondo: callado && lectura && !opts.ya, rid: opts.rid });   /* 09/11 · opts.ya: silenciosa pero sin cola (la intención de tocar Detalles) · 10/11 · rid fijo de un pendiente */
   } catch (e) {
     if (!callado) loaderOff();
     if (e && e.cortado) return new Promise(() => {});
     if (window.SINRED) SINRED.fallo(e);
+    /* La red se cayó a mitad (el teléfono aún no lo sabía): copia si la hay */
+    if (conCopia && e && (e.red || e.tiempo)) { const d = await deCopia(); if (d != null) return d; }
     if (window.FALLA) FALLA.anotar(e, action);   /* 10/11/2026 · el aviso dice QUÉ no se pudo (falla-red.js) */
     throw e;
   }
@@ -123,6 +139,8 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
     if (window.FALLA) FALLA.anotar(se, action);
     throw se;
   }
+  /* 10/11/2026 · copia en este equipo de lo que pinta una vista (para verla sin señal) */
+  if (lectura && window.SRV && SRV.copiaAplica(action)) SRV.copiaGuardar(yoDoc, action, params, json.data, json.v);
   /* 13/10/2026 · Fase 2: listado compacto (fmt=2) y comprimido (gz=1). Se
      abre aquí, una vez, y la vista recibe los objetos de siempre. La forma
      compacta se guarda aparte (no enumerable) para la caché de sesión. */
@@ -212,7 +230,7 @@ async function rapCargar(accion, params, pintar, clave) {
     } catch (e) { return c.data; }
   }
   const d = await rapTraer(accion, p, {});
-  if (d && d.ok !== false) RAP.guardar(k, d, d.__rapCrudo || d);
+  if (d && d.ok !== false && !d.__copia) RAP.guardar(k, d, d.__rapCrudo || d);   /* 10/11 · la copia del equipo no pasa por fresca */
   pintar(d, false);
   return d;
 }
@@ -241,7 +259,7 @@ const setActive = (doc) => localStorage.setItem(ACT_KEY, doc);
 function forgetSession(doc) { const list = getSessions().filter(x => x.documento !== doc); localStorage.setItem(SS_KEY, JSON.stringify(list)); if (localStorage.getItem(ACT_KEY) === doc) localStorage.removeItem(ACT_KEY); }
 /* 08/11/2026 · con pendientes sin subir se avisa y se borran (celular compartido): pendientes.js */
 function logout() { if (window.PEND && PEND.logout) return PEND.logout(); logoutDirecto(); }
-function logoutDirecto() { localStorage.removeItem(ACT_KEY); try { RAP.olvidar(); } catch (e) {} go('login'); }
+function logoutDirecto() { try { if (window.SRV) SRV.salir(); } catch (e) {} localStorage.removeItem(ACT_KEY); try { RAP.olvidar(); } catch (e) {} go('login'); }
 
 /* ============================================================
    PWA: INSTALACIÓN  (patrón SEP-GROUP, idéntico a la pública)
@@ -330,7 +348,7 @@ async function checkVersion() {
     if (!v) return;
     if (!APP_VERSION_LOADED) { APP_VERSION_LOADED = v; paintVersion(v); return; }
     if (v !== APP_VERSION_LOADED) return recargarVersion(v);
-  } finally { __verInFlight = false; }
+  } catch (e) { /* 10/11/2026 · sin señal: se revisa en la próxima vuelta */ } finally { __verInFlight = false; }
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
 
@@ -3701,7 +3719,7 @@ function ldBitBind(det, m) {
       LD_BITINF = null;                            // el informe se vuelve a pedir
       toast('Bitácora guardada', 'ok');
       ldBitRepintar(det, m);
-    } catch (e) { saving(save, false); toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : FALLA.txt(e), 'err'); }
+    } catch (e) { saving(save, false); if (e && e.pendiente) { form.hidden = true; form.querySelectorAll('textarea').forEach(t => t.value = ''); return fallaRed(e); } toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : FALLA.txt(e), 'err'); }
   };
   caja.querySelectorAll('.ld-bit-edit').forEach(bt => bt.onclick = () => ldBitEditar(det, m, bt.dataset.id));
 }
@@ -7020,7 +7038,7 @@ async function slEliminar(id) {
    versión (freno en sessionStorage). La primera instalación no recarga. */
 if ('serviceWorker' in navigator) window.addEventListener('load', () => {
   const habia = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { try { r.update(); } catch (e) {} }).catch(() => {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { try { const u = r.update(); if (u && u.catch) u.catch(() => {}); } catch (e) {} }).catch(() => {});   /* 10/11 · sin señal el update() rechaza: no es un error de la app */
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!habia) return;
     const k = nsKey('jpriv_sw_cc_' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''));

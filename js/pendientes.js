@@ -44,6 +44,7 @@
     dueno: () => yo() || 'anon',
     textoSin: 'Sin conexión',
     explicar: function () {
+      if (window.SRV) return SRV.explicar();   /* 10/11/2026 · la explicación depende de la vista (sin-red-vistas.js) */
       const n = SR.contar();
       openSheet(`<div class="grip"></div><h2 class="h2" style="margin-bottom:6px;">Estás sin conexión</h2>
         <div class="sr-ayuda">
@@ -186,12 +187,15 @@
   /* ---------- cerrar sesión con pendientes (celular compartido) ---------- */
   async function logoutConPendientes() {
     const d = yo(), n = d ? SR.contar(d) : 0;
-    if (n) {
+    const nw = (d && window.SRV) ? SRV.pendContar('', d) : 0;   /* 10/11/2026 · reuniones, compromisos… sin subir */
+    if (n || nw) {
       const ok = await confirmar('Tienes pendientes sin subir',
-        crow('En este equipo', `${n} registro${n === 1 ? '' : 's'} sin subir`) +
+        (n ? crow('En Base de datos', `${n} registro${n === 1 ? '' : 's'} sin subir`) : '') +
+        (nw ? crow('Pendientes por subir', `${nw} (reuniones, compromisos, solicitudes, eventos o bitácoras)`) : '') +
         crow('Si sales', 'Se borran de este equipo (puede ser un celular compartido)'));
       if (!ok) return;
-      SR.borrar(d);
+      if (n) SR.borrar(d);
+      if (nw) SRV.borrarPendientes(d);
     }
     logoutDirecto();
   }

@@ -153,6 +153,7 @@
 
   function txt(e, accionDada) {
     e = tomar(e);
+    if (e && e.pendiente) return 'No tienes internet: ' + (e.que || 'el cambio').replace(/^./, function (c) { return c.toLowerCase(); }) + ' se guardó en este equipo. Queda en «Pendientes por subir» hasta que vuelva la señal.';
     var accion = accionDada || (e && e.accion) || '';
     var lectura = accion ? RED_LECTURA(accion) : true;
     var f = frase(accion) || (lectura ? (VISTAS[vista()] || 'cargar esta información') : 'guardar el cambio');
@@ -176,13 +177,24 @@
     return '<div class="fr-caja fr-caja--' + (red ? 'red' : 'srv') + '" role="status" data-falla="' + (red ? 'red' : 'srv') + '">' +
       '<span class="fr-ic">' + (red ? IC_RED : IC_SRV) + '</span>' +
       '<p class="fr-txt">' + esc(txt(e, accion)) + '</p>' +
-      (red ? '<p class="fr-sub">Se vuelve a cargar sola cuando regrese la señal.</p>' : '') +
+      (red ? '<p class="fr-sub">' + (sinCopia(e, accion) ? 'Esta vista todavía no está guardada en este equipo: ábrela una vez con señal y quedará disponible sin internet. ' : '') + 'Se vuelve a cargar sola cuando regrese la señal.</p>' : '') +
       '<button type="button" class="btn btn-ghost fr-btn" data-falla-reintentar>Reintentar</button>' +
       '</div>';
   }
 
+  function sinCopia(e, accion) {
+    var a = accion || (e && e.accion) || '';
+    return !!(a && raiz.SRV && raiz.SRV.copiaAplica(a) && RED_LECTURA(a));
+  }
   function aviso(e, accion) {
     var m = txt(e, accion);
+    var pe = tomar(e);
+    if (pe && pe.pendiente) {
+      /* Quedó guardado: se cierra la hoja del formulario y se avisa (no es un error) */
+      if (typeof raiz.closeLayer === 'function') raiz.closeLayer();
+      if (typeof raiz.toast === 'function') raiz.toast(m, 'ok');
+      return m;
+    }
     if (typeof raiz.toast === 'function') raiz.toast(m, 'err');
     return m;
   }
