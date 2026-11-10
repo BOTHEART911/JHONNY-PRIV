@@ -89,7 +89,7 @@
       }
       toast(r.apagadas && r.apagadas.length ? 'Vistas guardadas · ' + r.apagadas.length + ' apagada(s) en la app pública' : 'Vistas guardadas · todas encendidas', 'ok');
     } catch (err) {
-      toast('Error de conexión', 'err');
+      fallaRed(err);
     } finally {
       enCurso = false; saving(btn, false);
       if (raiz.RED && RED.pantalla) RED.pantalla('cfg.vistasGuardar', performance.now() - t0);

@@ -1,0 +1,20 @@
+/* ============================================================================
+   falla-red.css — aviso de una vista que no cargó (10/11/2026)
+   Sin internet: ámbar (igual que la tira de sin conexión). Servidor: rojo suave.
+   Solo tokens de la marca + los mismos tonos de sin-red.css (claro y oscuro).
+   ============================================================================ */
+.fr-caja {
+  max-width: 420px; margin: 24px auto; padding: 20px 18px; border-radius: 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  animation: fr-entra .2s ease-out;
+}
+.fr-caja--red { background: #FEF3C7; color: #92400E; box-shadow: inset 0 0 0 1px #FCD34D; }
+.fr-caja--srv { background: #FEE2E2; color: #991B1B; box-shadow: inset 0 0 0 1px #FCA5A5; }
+.fr-ic { display: inline-flex; opacity: .9; }
+.fr-txt { margin: 0; font: 600 14.5px/1.45 var(--font-body); }
+.fr-sub { margin: 0; font: 500 12.5px/1.4 var(--font-body); opacity: .8; }
+.fr-btn { margin-top: 6px; min-height: 40px; padding: 0 18px; }
+html.oscuro .fr-caja--red { background: rgba(245,158,11,.14); color: #FCD34D; box-shadow: inset 0 0 0 1px rgba(252,211,77,.35); }
+html.oscuro .fr-caja--srv { background: rgba(214,69,69,.16); color: #FCA5A5; box-shadow: inset 0 0 0 1px rgba(252,165,165,.35); }
+@keyframes fr-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fr-caja { animation: none; } }

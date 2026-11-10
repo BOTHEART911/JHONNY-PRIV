@@ -699,7 +699,7 @@
            real (p. ej. "No autorizado"). Mostrarlo es más útil que un genérico. */
         cargando.remove();
         if (input) { input.disabled = false; }
-        pintarError(body, (err && err.message) ? err.message : 'Error de conexión con el backend.',
+        pintarError(body, window.FALLA ? FALLA.txt(err) : ((err && err.message) || 'No se pudo consultar.'),
           function () { consultar(vista, body, pregunta, input); });
       });
   }
@@ -1034,7 +1034,7 @@
               past.textContent = 'Clave de Gemini guardada';
             }
           })
-          .catch(function (err) { guardar.disabled = false; toast((err && err.message) || 'Error de conexión.', 'err'); });
+          .catch(function (err) { guardar.disabled = false; (window.fallaRed ? fallaRed(err) : toast((err && err.message) || 'No se pudo guardar.', 'err')); });
       });
 
       var borrar = sec.querySelector('#ia-cfg-del');
@@ -1046,7 +1046,7 @@
             toast((r && r.msg) || 'Listo.');
             estado = null;
           })
-          .catch(function (err) { borrar.disabled = false; toast((err && err.message) || 'Error de conexión.', 'err'); });
+          .catch(function (err) { borrar.disabled = false; (window.fallaRed ? fallaRed(err) : toast((err && err.message) || 'No se pudo guardar.', 'err')); });
       });
     });
   }
@@ -1149,7 +1149,7 @@
             toast((r && r.msg) || 'Listo.', (r && r.ok) ? '' : 'err');
             if (r && r.ok) { vozCfg = null; sec.querySelector('#voz-cfg-key').value = ''; }
           })
-          .catch(function (err) { guardar.disabled = false; toast((err && err.message) || 'Error de conexión.', 'err'); });
+          .catch(function (err) { guardar.disabled = false; (window.fallaRed ? fallaRed(err) : toast((err && err.message) || 'No se pudo guardar.', 'err')); });
       });
 
       var borrar = sec.querySelector('#voz-cfg-del');
@@ -1161,7 +1161,7 @@
             toast((r && r.msg) || 'Listo.');
             vozCfg = null;
           })
-          .catch(function (err) { borrar.disabled = false; toast((err && err.message) || 'Error de conexión.', 'err'); });
+          .catch(function (err) { borrar.disabled = false; (window.fallaRed ? fallaRed(err) : toast((err && err.message) || 'No se pudo guardar.', 'err')); });
       });
     });
   }

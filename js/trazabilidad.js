@@ -212,7 +212,7 @@
     } catch (e) {
       if (TZ !== yo) return;
       if (/no reconocida/i.test(String(e && e.message))) return tzRespaldo(doc, yo);   // CORE viejo desplegado
-      if (!yo.data && $('#tz-body')) $('#tz-body').innerHTML = `<p class="muted center">Error de conexión.</p>`;
+      if (!yo.data && $('#tz-body')) $('#tz-body').innerHTML = `${fallaHtml(e)}`;
     }
   }
   window.tzDetalles = tzDetalles;
@@ -226,7 +226,7 @@
       yo.data = { ok: true, persona: r.persona, esLider: r.esLider, items: [], resumen: {}, viejo: true };
       yo.tab = 'datos'; $$('.tz-tab').forEach(x => x.classList.toggle('on', x.dataset.tab === 'datos'));
       tzPintar();
-    } catch (e) { if ($('#tz-body')) $('#tz-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+    } catch (e) { if ($('#tz-body')) $('#tz-body').innerHTML = `${fallaHtml(e)}`; }
   }
 
   function tzPintar() {

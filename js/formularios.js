@@ -85,7 +85,7 @@
         FM_ALL = r.items || [];
         fmPintar();
       });
-    } catch (e) { if ($('#fm-body') && primera) $('#fm-body').innerHTML = `<p class="muted center">${/no reconocida/i.test(String(e && e.message)) ? 'El servidor todavía no tiene Formularios: falta desplegar la versión nueva del CORE.' : 'Error de conexión.'}</p>`; return; }
+    } catch (e) { if ($('#fm-body') && primera) $('#fm-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">El servidor todavía no tiene Formularios: falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); return; }
     vivoBind('formularios', FM_ME, fmVivo);
   }
   window.viewFormularios = viewFormularios;
@@ -216,7 +216,7 @@
       const r = await api(accion, {}, 'POST', Object.assign(cuerpo, fmAuth()));
       if (!r || r.ok === false) { toast((r && r.msg) || 'No se pudo guardar', 'err'); return null; }
       return r;
-    } catch (e) { toast(String(e && e.message || 'Error de conexión'), 'err'); return null; }
+    } catch (e) { fallaRed(e); return null; }
     finally { if (btn && btn.isConnected) { saving(btn, false); delete btn.dataset.ocupado; } }
   }
 
@@ -722,7 +722,7 @@
         if (!r || r.ok === false) { if (!yo.items) $('#fmd-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
         yo.items = r.items || []; yo.form = r.form || {}; fmdPintar();
       }, fmdClave(it.id));
-    } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = `<p class="muted center">${/no reconocida/i.test(String(e && e.message)) ? 'Falta desplegar la versión nueva del CORE.' : 'Error de conexión.'}</p>`; }
+    } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">Falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); }
   }
 
   /* Firebase avisó un cambio de conteo: si el formulario abierto cambió, se trae de fondo */

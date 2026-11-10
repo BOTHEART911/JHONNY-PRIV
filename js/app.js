@@ -64,7 +64,9 @@ const iniciales = (n) => { const p = String(n || '').trim().split(/\s+/); return
 const val = id => (($('#' + id) || {}).value || '').trim();
 const onlyDig = s => String(s || '').replace(/\D/g, '');
 
-function toast(msg, kind = '') { const t = h(`<div class="toast ${kind}">${esc(msg)}</div>`); layer.appendChild(t); setTimeout(() => t.remove(), 3200); }
+/* 10/11/2026 · red de seguridad: un texto crudo de red ("Failed to fetch", "Sin conexión…")
+   que llegue a un toast se traduce al aviso claro de falla-red.js */
+function toast(msg, kind = '') { if (kind === 'err' && window.FALLA && (FALLA.RAW_RED.test(String(msg)) || /^(Tiempo de espera agotado|Respuesta de Google no v[aá]lida|Respuesta no v[aá]lida del servidor)$/.test(String(msg)))) msg = FALLA.txt(); const t = h(`<div class="toast ${kind}">${esc(msg)}</div>`); layer.appendChild(t); setTimeout(() => t.remove(), 3200); }
 
 /* ---------- Cliente API ---------- */
 let _apiActivas = 0;
@@ -100,7 +102,8 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
   if (API_URL.startsWith('PEGA_AQUI')) { toast('Falta configurar la URL del backend', 'err'); throw new Error('API_URL sin configurar'); }
   const callado = !!opts.silent;
   /* 08/11/2026 · sin conexión: lo que escribe se avisa al instante (no espera 60 s) */
-  if (!RED.esLectura(action) && window.SINRED && !SINRED.enLinea()) { const e = new Error('Sin conexión: esto necesita señal'); e.red = true; throw e; }
+  /* 10/11/2026 · también las lecturas: sin señal se avisa al instante (sin esperar los reintentos) */
+  if (window.SINRED && !SINRED.enLinea() && !opts.forzar) { const e = new Error('Sin conexión: esto necesita señal'); e.red = true; if (window.FALLA) FALLA.anotar(e, action); throw e; }
   if (!callado) loaderOn();
   let json;
   try {
@@ -110,12 +113,15 @@ async function api(action, params = {}, method = 'GET', body = null, opts = {}) 
     if (!callado) loaderOff();
     if (e && e.cortado) return new Promise(() => {});
     if (window.SINRED) SINRED.fallo(e);
+    if (window.FALLA) FALLA.anotar(e, action);   /* 10/11/2026 · el aviso dice QUÉ no se pudo (falla-red.js) */
     throw e;
   }
   if (!callado) loaderOff();
   if (!json.ok) {
     if (json.error === 'SESION_VENCIDA') { sesionVencida(); return new Promise(() => {}); }
-    throw new Error(json.error || 'Error del servidor');
+    const se = new Error(json.error || 'Error del servidor'); se.servidor = true;
+    if (window.FALLA) FALLA.anotar(se, action);
+    throw se;
   }
   /* 13/10/2026 · Fase 2: listado compacto (fmt=2) y comprimido (gz=1). Se
      abre aquí, una vez, y la vista recibe los objetos de siempre. La forma
@@ -776,7 +782,7 @@ async function loginCon(pin, btn) {
     if (!r.ok) { pinBuffer = ''; paintPin(); return toast(r.msg || 'No se pudo iniciar sesión', 'err'); }
     saveSession(r.user);
     go('home');
-  } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); pinBuffer = ''; paintPin(); }
+  } catch (e) { fallaRed(e); saving(btn, false); pinBuffer = ''; paintPin(); }
 }
 
 function rolLabel(rol) {
@@ -1433,7 +1439,7 @@ async function viewBaseDatos(user) {
       primera = false;
       bdApplyFilter();
     });
-  } catch (e) { if ($('#bd-body') && primera) $('#bd-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { if ($('#bd-body') && primera) $('#bd-body').innerHTML = `${fallaHtml(e)}`; }
 
   const q = $('#bd-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(bdApplyFilter, 160); };
@@ -1575,7 +1581,7 @@ async function bdReiniciarAsistencia() {
     if (!r || !r.ok) return toast((r && r.msg) || 'No se pudo reiniciar', 'err');
     toast(r.borradas ? 'Asistencia reiniciada · ' + Number(r.borradas).toLocaleString('es-CO') + ' registro(s)' : 'No había asistencias marcadas', 'ok');
     await bdLoteRecargar();   // la lista queda vieja: se vuelve a pedir entera
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 function bdExportar(tipo) {
@@ -1826,7 +1832,7 @@ async function bdDetalles(doc) {
     $('#det-edit').onclick = () => { closeLayer(); bdEditar(doc); };
     $('#det-inact').onclick = () => { closeLayer(); bdInactivar(doc, BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc))); };
     $('#det-elim').onclick = () => { closeLayer(); bdEliminar(doc, BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc))); };
-  } catch (e) { closeLayer(); toast('Error de conexión', 'err'); }
+  } catch (e) { closeLayer(); fallaRed(e); }
 }
 
 /* ---- EDITAR ---- */
@@ -1834,7 +1840,7 @@ async function bdEditar(doc) {
   openSheet(`<div class="grip"></div><h2 class="h2">Editar</h2>${loadingBox('Cargando…')}`);
   let p;
   try { const r = await api('priv.persona', { documento: doc, ...auth() }); if (!r.ok) { closeLayer(); return toast(r.msg, 'err'); } p = r.persona; }
-  catch { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(`<div class="grip"></div><h2 class="h2" style="margin-bottom:10px;">Editar registro</h2>
     <div class="stack">
       ${field('Documento', inputEl('e-doc', 'inputmode="numeric"'))}
@@ -1857,7 +1863,7 @@ async function bdEditar(doc) {
       const r = await api('priv.personaEditar', {}, 'POST', body); saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Registro actualizado', 'ok'); bdUpsertCard(r.card);
-    } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+    } catch (e) { fallaRed(e); saving(btn, false); }
   };
 }
 
@@ -1887,7 +1893,7 @@ async function bdEliminar(doc, card) {
       saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
       closeLayer(); toast('Registro eliminado', 'ok'); bdRemoveCard(doc);
-    } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+    } catch (e) { fallaRed(e); saving(btn, false); }
   };
 }
 
@@ -1909,7 +1915,7 @@ async function bdInactivar(doc, card) {
     const r = await api('priv.personaInactivar', {}, 'POST', { ...auth(), documento: doc });
     if (!r.ok) return toast(r.msg || 'No se pudo inactivar', 'err');
     toast('Registro inactivado', 'ok'); bdUpsertCard(r.card);
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ---- CONSULTAR PUESTO (pegar de la Registraduría) ---- */
@@ -1948,7 +1954,7 @@ function bdConsultar(doc, card) {
       try { const r = await api('priv.puestoGuardar', {}, 'POST', body); saving(btn, false);
         if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
         closeLayer(); toast('Puesto guardado', 'ok'); bdUpsertCard(r.card);
-      } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+      } catch (e) { fallaRed(e); saving(btn, false); }
     };
   };
   consMarcas(doc);   // 25/07: checks POR CONFIRMAR / A LA ESPERA (solo casos nuevos)
@@ -2031,7 +2037,7 @@ async function consMarcas(doc) {
       saving(save, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Estado guardado', 'ok'); bdUpsertCard(r.card);
-    } catch (e) { toast('Error de conexión', 'err'); saving(save, false); }
+    } catch (e) { fallaRed(e); saving(save, false); }
   };
   pintar();
 }
@@ -2401,7 +2407,7 @@ function bdAgregar() {
       const r = await api('priv.validarDoc', { documento: d, ...auth() }); saving(btn, false);
       if (r.existe) { $('#a-msg').innerHTML = `<div class="ag-warn">Ya existe: <b>${esc(r.nombre || d)}</b>. No se puede duplicar.</div>`; unlock(false); }
       else { $('#a-msg').innerHTML = `<div class="ag-ok">Documento disponible. Completa los datos.</div>`; unlock(true); $('#a-nombre').focus(); }
-    } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+    } catch (e) { fallaRed(e); saving(btn, false); }
   };
   $('#a-save').onclick = async () => {
     const body = { ...auth(), documento: onlyDig(val('a-doc')), nombre: val('a-nombre'), contacto: onlyDig(val('a-contacto')), residencia: val('a-resi'), referencia: onlyDig(val('a-ref')) };
@@ -2415,7 +2421,7 @@ function bdAgregar() {
       $$('#bd-chips .bd-chip').forEach(x => x.classList.toggle('active', x.dataset.f === 'Todos'));
       if (($('#bd-q')||{}).value) $('#bd-q').value = '';
       bdUpsertCard(r.card, true);
-    } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+    } catch (e) { fallaRed(e); saving(btn, false); }
   };
 }
 
@@ -2549,7 +2555,7 @@ async function ldMemoria() {
     });
     $$('#layer [data-pdf]').forEach(b => b.onclick = () => ldMemoriaPdf(b.dataset.pdf, b));
     $$('#layer [data-xlsx]').forEach(b => b.onclick = () => ldMemoriaXlsx(b.dataset.xlsx, b));
-  } catch (e) { closeLayer(); toast('Error de conexión', 'err'); }
+  } catch (e) { closeLayer(); fallaRed(e); }
 }
 
 async function ldMemoriaVer(mes) {
@@ -2576,7 +2582,7 @@ async function ldMemoriaVer(mes) {
       </div>`, 'sheet-xl');
     $('#ld-mes-pdf').onclick = () => ldMemoriaPdf(mes, $('#ld-mes-pdf'));
     $('#ld-mes-xlsx').onclick = () => ldMemoriaXlsx(mes, $('#ld-mes-xlsx'));
-  } catch (e) { closeLayer(); toast('Error de conexión', 'err'); }
+  } catch (e) { closeLayer(); fallaRed(e); }
 }
 
 async function ldMemoriaPdf(mes, btn) {
@@ -2772,7 +2778,7 @@ async function ldActivar(cod) {
       : ('No activado' + (n ? ` · ${n.toLocaleString('es-CO')} ahijado(s) también` : '')), 'ok');
   } catch (e) {
     if (btn) btn.disabled = false;
-    toast('Error de conexión', 'err');
+    fallaRed(e);
   }
 }
 
@@ -2815,7 +2821,7 @@ async function viewLideres(user) {
       primera = false;
       ldClfilRender(); ldApplyFilter();
     });
-  } catch (e) { if ($('#ld-body') && primera) $('#ld-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { if ($('#ld-body') && primera) $('#ld-body').innerHTML = `${fallaHtml(e)}`; }
   const q = $('#ld-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(ldApplyFilter, 160); };
 
@@ -3122,7 +3128,7 @@ async function ldVer(cod) {
     const c = Object.assign({}, base || {}, r.lider);
     if (base && base.foto && !c.foto) c.foto = base.foto;
     ldVerPintar(c, true);
-  } catch (e) { if (!base) { closeLayer(); toast('Error de conexión', 'err'); } }
+  } catch (e) { if (!base) { closeLayer(); fallaRed(e); } }
 }
 
 /* ---- REFERIDOS del líder (13/10/2026 · tarjetas) ----
@@ -3154,7 +3160,7 @@ async function ldReferidos(cod, nombre, refCount, op) {
       if (!pintado) rfRender(); else if ($('#rf-body')) rfApply();
       pintado = true;
     }, 'priv.liderReferidos:' + cod);
-  } catch (e) { if (!pintado) { closeLayer(); toast('Error de conexión', 'err'); } }
+  } catch (e) { if (!pintado) { closeLayer(); fallaRed(e); } }
 }
 
 /* Pinta la hoja de referidos desde memoria (sin volver a pedir datos) */
@@ -3281,7 +3287,7 @@ function rfReasignar() {
       RF_SEL = null;
       toast(`${n.toLocaleString('es-CO')} referido(s) reasignado(s)`, 'ok');
       rfRender();
-    } catch (e) { toast('Error de conexión', 'err'); saving(btn, false); }
+    } catch (e) { fallaRed(e); saving(btn, false); }
   };
 }
 
@@ -3695,7 +3701,7 @@ function ldBitBind(det, m) {
       LD_BITINF = null;                            // el informe se vuelve a pedir
       toast('Bitácora guardada', 'ok');
       ldBitRepintar(det, m);
-    } catch (e) { saving(save, false); toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : 'Error de conexión', 'err'); }
+    } catch (e) { saving(save, false); toast(String(e && e.message || '').indexOf('Permiso') >= 0 ? 'No tienes permiso para escribir bitácoras' : FALLA.txt(e), 'err'); }
   };
   caja.querySelectorAll('.ld-bit-edit').forEach(bt => bt.onclick = () => ldBitEditar(det, m, bt.dataset.id));
 }
@@ -3725,7 +3731,7 @@ function ldBitEditar(det, m, id) {
       LD_BITINF = null;
       toast('Bitácora actualizada', 'ok');
       ldBitRepintar(det, m);
-    } catch (e) { saving(save, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(save, false); fallaRed(e); }
   };
 }
 
@@ -4064,7 +4070,7 @@ async function ldAhijados(cod) {
   openSheet(`<div class="grip"></div><h2 class="h2">Ahijados</h2>${loadingBox('Cargando…')}`);
   let r;
   try { r = await api('priv.liderAhijados', { codigo: cod, ...ldAuth() }); }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   if (!r || !r.ok) { closeLayer(); return toast((r && r.msg) || 'No se pudo cargar', 'err'); }
   ldAhijadosPintar(r);
 }
@@ -4101,7 +4107,7 @@ function ldAhijadosPintar(r) {
       const rr = await api('priv.liderDelegar', {}, 'POST', { ...ldAuth(), padrino: r.padrino.codigo, ahijado: art.dataset.cod, on: on });
       if (!rr.ok) { ck.checked = !on; toast(rr.msg || 'No se pudo guardar', 'err'); }
       else toast(on ? 'Grupo delegado a su padrino' : 'Delegación retirada', 'ok');
-    } catch (e) { ck.checked = !on; toast('Error de conexión', 'err'); }
+    } catch (e) { ck.checked = !on; fallaRed(e); }
     ck.disabled = false;
   });
 }
@@ -4149,7 +4155,7 @@ function ldAcciones(cod) {
         ldUpsertCard(r.card); ldClfilRender();
         toast('Clasificación actualizada', 'ok');
       }
-    } catch (e) { toast('Error de conexión', 'err'); }
+    } catch (e) { fallaRed(e); }
     if (caja) caja.classList.remove('ld-cl-busy');
   });
   layer.querySelectorAll('[data-wa]').forEach(b => b.onclick = () => ldWaOpen(c.contacto, ldWaText(b.dataset.wa, c)));
@@ -4167,7 +4173,7 @@ function ldAcciones(cod) {
       try {
         const r = await api('priv.liderAccion', {}, 'POST', { ...ldAuth(), codigo: c.codigo, tipo: b.dataset.bot });
         toast(r.msg || (r.ok ? 'Mensaje enviado' : 'No se pudo enviar'), r.ok ? 'ok' : 'err');
-      } catch (e) { toast('Error de conexión', 'err'); }
+      } catch (e) { fallaRed(e); }
       b.disabled = false; b.innerHTML = orig;
     };
   });
@@ -4185,7 +4191,7 @@ async function ldEditar(cod, pre) {
     const [rv, rm] = await Promise.all([api('priv.liderVer', { codigo: cod, ...ldAuth() }), api('priv.liderNuevoMeta', ldAuth())]);
     if (!rv.ok) { closeLayer(); return toast(rv.msg, 'err'); }
     c = rv.lider; meta = rm;
-  } catch { closeLayer(); return toast('Error de conexión', 'err'); }
+  } catch (e) { closeLayer(); return fallaRed(e); }
   const padrinos = (meta.lideres || []).map(l => l.nombre).filter(n => n && n !== c.nombre);
   openSheet(`<div class="grip"></div><h2 class="h2" style="margin-bottom:10px;">Editar líder</h2>
     <div class="stack">
@@ -4241,7 +4247,7 @@ async function ldEditar(cod, pre) {
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Líder actualizado', 'ok'); ldUpsertCard(r.card);
       ldAplicarAfectados(r.desactivados);   /* 01/09: bajó él y su grupo */
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -4250,7 +4256,7 @@ async function ldAgregar() {
   openSheet(`<div class="grip"></div><h2 class="h2">Registro de líder</h2>${loadingBox('Preparando…')}`);
   let meta;
   try { meta = await api('priv.liderNuevoMeta', ldAuth()); }
-  catch { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const padrinos = (meta.lideres || []).map(l => l.nombre);
   openSheet(`<div class="grip"></div><h2 class="h2" style="margin-bottom:6px;">Registro de líder</h2>
     <p class="muted small">Primero el documento: si ya está en la base, se usa; si no, se crea también en la base. El líder no se duplica.</p>
@@ -4296,7 +4302,7 @@ async function ldAgregar() {
         $('#la-msg').innerHTML = `<div class="ag-ok">No está en la base: se creará también con estos datos.</div>`;
         unlock(true); $('#la-nombre').focus();
       }
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
   $('#la-save').onclick = async () => {
     const cod = onlyDig(val('la-cod'));
@@ -4315,7 +4321,7 @@ async function ldAgregar() {
       closeLayer(); toast('Líder registrado', 'ok');
       if (($('#ld-q') || {}).value) $('#ld-q').value = '';
       ldUpsertCard(r.card, true);
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -4380,7 +4386,7 @@ async function viewDashboard(user) {
       primera = false;
       dashRender();
     });
-  } catch (e) { if ($('#dash-body') && primera) $('#dash-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { if ($('#dash-body') && primera) $('#dash-body').innerHTML = `${fallaHtml(e)}`; }
 
   vivoBind('bd', DASH_ME, vivoDashboard);   // EN VIVO: el Dashboard sale de PRINCIPAL → canal 'bd'
 }
@@ -4397,7 +4403,7 @@ async function dashViejo(primera) {
     DASH_ROWS = r.rows || []; DASH_COLS = r.columnas || [];
     DASH_PUESTOS = r.puestos || []; DASH_P_OTRO = r.puestoOtro || DASH_P_OTRO;
     dashRenderControls(); dashRender();
-  } catch (e) { if ($('#dash-body')) $('#dash-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { if ($('#dash-body')) $('#dash-body').innerHTML = `${fallaHtml(e)}`; }
 }
 
 async function vivoDashboard(rev) {
@@ -4597,7 +4603,7 @@ async function viewSimulador(user) {
     const r = await api('priv.simulador', { caller: SIM_ME });
     if (!r.ok) { $('#sim-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
     SIM = r; elecSet(r.eleccion); simRender();
-  } catch (e) { $('#sim-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { $('#sim-body').innerHTML = `${fallaHtml(e)}`; }
 
   vivoBind('bd', SIM_ME, vivoSimulador);   // EN VIVO: el Simulador también sale de PRINCIPAL
 }
@@ -4915,7 +4921,7 @@ function miFotoMenu(user) {
       saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo subir', 'err');
       miFotoAplicar(user, r.foto); closeLayer(); toast('Foto actualizada', 'ok');
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
   const z = $('#mf-zoom'); if (z) z.onclick = () => { closeLayer(); zoomImagen(foto); };
   const d = $('#mf-del');
@@ -4925,7 +4931,7 @@ function miFotoMenu(user) {
       const r = await api('priv.miFotoQuitar', {}, 'POST', { caller: user.documento });
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       miFotoAplicar(user, ''); closeLayer(); toast('Foto quitada', 'ok');
-    } catch (e) { toast('Error de conexión', 'err'); }
+    } catch (e) { fallaRed(e); }
   };
 }
 /* Deja la foto en el usuario, en la sesión guardada del dispositivo y repinta */
@@ -5096,7 +5102,7 @@ async function viewEventos(user) {
     if (!r.ok) { $('#ev-body').innerHTML = `<p class="muted center">No se pudo cargar.</p>`; return; }
     EV_ALL = r.items || [];
     evApplyFilter();
-  } catch (e) { $('#ev-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; }
+  } catch (e) { $('#ev-body').innerHTML = `${fallaHtml(e)}`; }
   const q = $('#ev-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(evApplyFilter, 160); };
   $$('#ev-chips .bd-chip').forEach(ch => ch.onclick = () => { $$('#ev-chips .bd-chip').forEach(x => x.classList.remove('active')); ch.classList.add('active'); evApplyFilter(); });
@@ -5172,7 +5178,7 @@ async function evDetalles(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Evento</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.eventoVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.evento; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const rows = [
     ['ID', '#' + c.id],
     ['Estado', evEstadoLabel(c.estado)],
@@ -5266,7 +5272,7 @@ function evEstadoPicker(id) {
     if (b.classList.contains('sel')) return closeLayer();
     layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = true);
     try { const r = await api('priv.eventoEstado', {}, 'POST', { id, estado: b.dataset.e, ...m5Auth() }); if (!r.ok) { toast(r.msg || 'No se pudo cambiar', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); return; } closeLayer(); toast('Estado actualizado', 'ok'); evUpsert(r.card); }
-    catch (e) { toast('Error de conexión', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
+    catch (e) { fallaRed(e); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
   });
 }
 
@@ -5330,28 +5336,28 @@ function evValidForm(b) {
 
 async function evAgregar() {
   openSheet(`<div class="grip"></div><h2 class="h2">Registro de Evento</h2>${loadingBox('Preparando…')}`);
-  try { await api('priv.eventoMeta', m5Auth()); } catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  try { await api('priv.eventoMeta', m5Auth()); } catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(evFormHtml('Registro de Evento', {}));
   evFillForm({});
   $('#ev-save').onclick = async () => {
     const b = evReadForm(); if (!evValidForm(b)) return;
     const btn = $('#ev-save'); saving(btn, true);
     try { const r = await api('priv.eventoGuardar', {}, 'POST', { ...b, ...m5Auth() }); saving(btn, false); if (!r.ok) return toast(r.msg || 'No se pudo crear', 'err'); closeLayer(); toast('Evento creado y sincronizado con el calendario', 'ok'); if (($('#ev-q') || {}).value) $('#ev-q').value = ''; $$('#ev-chips .bd-chip').forEach((x, i) => x.classList.toggle('active', i === 0)); evUpsert(r.card, true); }
-    catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function evEditar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Editar evento</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.eventoVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg, 'err'); } c = r.evento; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(evFormHtml('Editar evento', c));
   evFillForm(c);
   $('#ev-save').onclick = async () => {
     const b = evReadForm(); if (!evValidForm(b)) return;
     const btn = $('#ev-save'); saving(btn, true);
     try { const r = await api('priv.eventoEditar', {}, 'POST', { id, ...b, ...m5Auth() }); saving(btn, false); if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err'); closeLayer(); toast('Evento actualizado', 'ok'); evUpsert(r.card); }
-    catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function evEliminar(id) {
@@ -5359,7 +5365,7 @@ async function evEliminar(id) {
   const ok = await confirmar('¿Eliminar este evento?', crow('Evento', '#' + c.id + ' ' + c.evento) + crow('Fecha', fmtFechaCorta(c.fecha)) + `<p class="muted small" style="margin-top:8px;">También se elimina del calendario de Google. Esta acción no se puede deshacer.</p>`);
   if (!ok) return;
   try { const r = await api('priv.eventoEliminar', {}, 'POST', { id, ...m5Auth() }); if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err'); EV_ALL = EV_ALL.filter(x => String(x.id) !== String(id)); evApplyFilter(); toast('Evento eliminado', 'ok'); }
-  catch (e) { toast('Error de conexión', 'err'); }
+  catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -5510,7 +5516,7 @@ function agResumenBot(b, texto) {
   clearTimeout(b._t); b._armed = false; b.classList.remove('ld-armed'); b.disabled = true; b.innerHTML = '<span class="spinner spinner-brand"></span>';
   api('priv.agendaBotEnviar', {}, 'POST', { texto, ...m5Auth() })
     .then(r => toast(r.msg || (r.ok ? 'Enviado' : 'No se pudo enviar'), r.ok ? 'ok' : 'err'))
-    .catch(() => toast('Error de conexión', 'err'))
+    .catch((e) => fallaRed(e))
     .finally(() => { b.disabled = false; b.innerHTML = b.dataset.orig || 'Desde el bot'; });
 }
 
@@ -5693,7 +5699,7 @@ async function agPendMarcar(id, btn) {
     const b = agBloqueo();
     if (!b.on) { closeLayer(); return toast('Agenda desbloqueada', 'ok'); }
     agPendientesModal();
-  } catch (e) { if (btn) saving(btn, false); toast('Error de conexión', 'err'); }
+  } catch (e) { if (btn) saving(btn, false); fallaRed(e); }
 }
 
 function agAvisoBloqueo(b) {
@@ -5773,7 +5779,7 @@ async function agEstadoBloque(estado) {
     AG_SEL.clear(); AG_SELMODE = false;
     agRender();
     toast(r.msg || 'Listo', (r.fallos && r.fallos.length) ? 'err' : 'ok');
-  } catch (e) { agRender(); toast('Error de conexión', 'err'); }
+  } catch (e) { agRender(); fallaRed(e); }
 }
 
 async function viewAgenda(user) {
@@ -5820,7 +5826,7 @@ async function viewAgenda(user) {
   $$('#ag-notif .ag-notif-ic').forEach(b => b.onclick = () => agResumenModal(b.dataset.f));
   agNotifCargar();   // AJUSTE 20/07: candidato + plantillas para las notificaciones
   try { const r = await api('priv.agenda', m5Auth()); AG_ALL = (r && r.items) || []; AG_ESTRICTA = !(r && r.estricta === false); AG_ESDEV = !!(r && r.esDev); }
-  catch (e) { $('#ag-cal').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
+  catch (e) { $('#ag-cal').innerHTML = `${fallaHtml(e)}`; return; }
   agRender();
 
   vivoBind('agenda', M5_ME, vivoAgenda);   // EN VIVO
@@ -6047,7 +6053,7 @@ async function agVer(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Reunión</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.reunionVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.reunion; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const tel = c.telefono ? String(c.telefono).replace(/^57/, '') : '';
   const rows = [
     ['ID', '#' + c.id],
@@ -6102,13 +6108,13 @@ function agWaBot(c) {
   clearTimeout(b._t); b._armed = false; b.classList.remove('ld-armed'); b.disabled = true; b.innerHTML = '<span class="spinner spinner-brand"></span>';
   api('priv.reunionWaBot', {}, 'POST', { id: c.id, texto: c.mensaje, ...m5Auth() })
     .then(r => { toast(r.msg || (r.ok ? 'Enviado' : 'No se pudo enviar'), r.ok ? 'ok' : 'err'); })
-    .catch(() => toast('Error de conexión', 'err'))
+    .catch((e) => fallaRed(e))
     .finally(() => { b.disabled = false; b.innerHTML = b.dataset.orig || 'Enviar por bot'; });
 }
 
 async function agEstadoSet(id, estado) {
   try { const r = await api('priv.reunionEstado', {}, 'POST', { id, estado, ...m5Auth() }); if (!r.ok) return toast(r.msg || 'No se pudo cambiar', 'err'); const i = AG_ALL.findIndex(x => String(x.id) === String(id)); if (i >= 0) AG_ALL[i] = r.card; closeLayer(); toast('Reunión: ' + estado, 'ok'); agRender(); }
-  catch (e) { toast('Error de conexión', 'err'); }
+  catch (e) { fallaRed(e); }
 }
 async function agEliminar(id) {
   const c = agFind(id) || { id };
@@ -6117,7 +6123,7 @@ async function agEliminar(id) {
   const ok = await confirmar('¿Eliminar esta reunión?', crow('Reunión', (c.titulo || '#' + id)) + (c.fecha ? crow('Fecha', fmtFechaCorta(c.fecha)) : '') + `<p class="muted small" style="margin-top:8px;">También se elimina su evento del calendario de Google.</p>`);
   if (!ok) return;
   try { const r = await api('priv.reunionEliminar', {}, 'POST', { id, ...m5Auth() }); if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err'); AG_ALL = AG_ALL.filter(x => String(x.id) !== String(id)); closeLayer(); toast('Reunión eliminada', 'ok'); agRender(); }
-  catch (e) { toast('Error de conexión', 'err'); }
+  catch (e) { fallaRed(e); }
 }
 
 /* Modal Agregar / Editar Reunión (contacto de PRINCIPAL o libre) */
@@ -6192,14 +6198,14 @@ async function agAgregar(prefillDate) {
   const bl = agBloqueo(); if (bl.on) return agAvisoBloqueo(bl);   /* AGENDA ESTRICTA 31/07 */
   openSheet(`<div class="grip"></div><h2 class="h2">Agregar reunión</h2>${loadingBox('Preparando…')}`);
   let meta;
-  try { meta = await api('priv.reunionMeta', m5Auth()); } catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  try { meta = await api('priv.reunionMeta', m5Auth()); } catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(agFormHtml('Agregar reunión', {}));
   agFillForm(prefillDate ? { fecha: dateToDDMM(prefillDate) } : {}, meta.invitados || 0);
   $('#ag-save').onclick = async () => {
     const b = agReadForm(); if (!agValidForm(b)) return;
     const btn = $('#ag-save'); saving(btn, true);
     try { const r = await api('priv.reunionGuardar', {}, 'POST', { ...b, ...m5Auth() }); saving(btn, false); if (!r.ok) return toast(r.msg || 'No se pudo crear', 'err'); AG_ALL.unshift(r.card); closeLayer(); toast('Reunión creada y sincronizada con el calendario', 'ok'); const d = parseFechaES(r.card.fecha); if (d) AG_CUR = d; agRender(); }
-    catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function agEditar(id) {
@@ -6209,14 +6215,14 @@ async function agEditar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Editar reunión</h2>${loadingBox('Cargando…')}`);
   let c, meta;
   try { const [rv, rm] = await Promise.all([api('priv.reunionVer', { id, ...m5Auth() }), api('priv.reunionMeta', m5Auth())]); if (!rv.ok) { closeLayer(); return toast(rv.msg, 'err'); } c = rv.reunion; meta = rm; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(agFormHtml('Editar reunión', c));
   agFillForm(c, meta.invitados || 0);
   $('#ag-save').onclick = async () => {
     const b = agReadForm(); if (!agValidForm(b)) return;
     const btn = $('#ag-save'); saving(btn, true);
     try { const r = await api('priv.reunionEditar', {}, 'POST', { id, ...b, ...m5Auth() }); saving(btn, false); if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err'); const i = AG_ALL.findIndex(x => String(x.id) === String(id)); if (i >= 0) AG_ALL[i] = r.card; closeLayer(); toast('Reunión actualizada', 'ok'); const d = parseFechaES(r.card.fecha); if (d) AG_CUR = d; agRender(); }
-    catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -6357,7 +6363,7 @@ async function viewCompromisos(user) {
       cmPintarResumen();
       cmApplyFilter();
     });
-  } catch (e) { if ($('#cm-body') && primera) $('#cm-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
+  } catch (e) { if ($('#cm-body') && primera) $('#cm-body').innerHTML = `${fallaHtml(e)}`; return; }
 
   vivoBind('compromisos', M5_ME, vivoCompromisos);   // EN VIVO
 }
@@ -6456,7 +6462,7 @@ async function cmDetalles(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Compromiso</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.compromisoVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.compromiso; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const dias = cmDias(c);
   const rows = [
     ['Estado', c.estado],
@@ -6503,7 +6509,7 @@ async function cmTzAgregar(id) {
     const res = $('#cm-tz-res'); if (res) res.textContent = r.resumen || '';
     if (r.card) cmUpsert(r.card);   // refresca tarjeta/contadores por debajo (sin cerrar la hoja)
     toast('Bitácora actualizada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
   finally { if ($('#cm-tz-add')) { const b = $('#cm-tz-add'); b.disabled = false; b.innerHTML = `${I.plus} Agregar a la bitácora`; } }
 }
 
@@ -6521,7 +6527,7 @@ function cmEstadoPicker(id) {
       const r = await api('priv.compromisoEstado', {}, 'POST', { id, estado: b.dataset.e, ...m5Auth() });
       if (!r.ok) { toast(r.msg || 'No se pudo cambiar', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); return; }
       closeLayer(); toast('Estado actualizado', 'ok'); cmUpsert(r.card);
-    } catch (e) { toast('Error de conexión', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
+    } catch (e) { fallaRed(e); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
   });
 }
 
@@ -6530,7 +6536,7 @@ async function cmEnviar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Enviar compromiso</h2>${loadingBox('Preparando mensaje…')}`);
   let c;
   try { const r = await api('priv.compromisoVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.compromiso; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   if (!c.telefono) { closeLayer(); return toast('El asignado no tiene teléfono registrado', 'err'); }
   const texto = (c.mensaje ? c.mensaje.replace(/%0A/g, '\n') : cmWaText(c));
   openSheet(`<div class="grip"></div>
@@ -6557,7 +6563,7 @@ function cmWaBot(c) {
   b.innerHTML = '<span class="spinner spinner-brand"></span>';
   api('priv.compromisoWaBot', {}, 'POST', { id: c.id, texto: ($('#cm-msg') || {}).value || '', ...m5Auth() })
     .then(r => { toast(r.msg || (r.ok ? 'Enviado' : 'No se pudo enviar'), r.ok ? 'ok' : 'err'); if (r.ok) closeLayer(); })
-    .catch(() => toast('Error de conexión', 'err'))
+    .catch((e) => fallaRed(e))
     .finally(() => { if ($('#cm-wa-bot')) { b.disabled = false; b.innerHTML = b.dataset.orig || 'Enviar por bot'; } });
 }
 
@@ -6639,14 +6645,14 @@ function cmAgregar() {
       if (($('#cm-q') || {}).value) $('#cm-q').value = '';
       $$('#cm-chips .bd-chip').forEach((x, i) => x.classList.toggle('active', i === 0));
       cmUpsert(r.card);
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function cmEditar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Editar compromiso</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.compromisoVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg, 'err'); } c = r.compromiso; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(cmFormHtml('Editar compromiso', c));
   cmFillForm(c);
   $('#cm-save').onclick = async () => {
@@ -6657,7 +6663,7 @@ async function cmEditar(id) {
       saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Compromiso actualizado', 'ok'); cmUpsert(r.card);
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function cmEliminar(id) {
@@ -6669,7 +6675,7 @@ async function cmEliminar(id) {
     if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
     CM_ALL = CM_ALL.filter(x => String(x.id) !== String(id));
     cmRecontar(); cmApplyFilter(); toast('Compromiso eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -6753,7 +6759,7 @@ async function viewSolicitudes(user) {
       primera = false;
       slPintarResumen(); slApplyFilter();
     });
-  } catch (e) { if ($('#sl-body') && primera) $('#sl-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
+  } catch (e) { if ($('#sl-body') && primera) $('#sl-body').innerHTML = `${fallaHtml(e)}`; return; }
   vivoBind('solicitudes', SL_ME, vivoSolicitudes);
 }
 
@@ -6831,7 +6837,7 @@ async function slEnviar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Enviar solicitud</h2>${loadingBox('Preparando mensaje…')}`);
   let c;
   try { const r = await api('priv.solicitudVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.solicitud; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   if (!c.telefono) { closeLayer(); return toast('El asignado no tiene teléfono registrado', 'err'); }
   const texto = (c.mensaje ? c.mensaje.replace(/%0A/g, '\n') : '');
   openSheet(`<div class="grip"></div>
@@ -6858,7 +6864,7 @@ function slWaBot(c) {
   b.innerHTML = '<span class="spinner spinner-brand"></span>';
   api('priv.solicitudWaBot', {}, 'POST', { id: c.id, texto: ($('#sl-msg') || {}).value || '', ...m5Auth() })
     .then(r => { toast(r.msg || (r.ok ? 'Enviado' : 'No se pudo enviar'), r.ok ? 'ok' : 'err'); if (r.ok) closeLayer(); })
-    .catch(() => toast('Error de conexión', 'err'))
+    .catch((e) => fallaRed(e))
     .finally(() => { if ($('#sl-wa-bot')) { b.disabled = false; b.innerHTML = b.dataset.orig || 'Enviar por bot'; } });
 }
 
@@ -6866,7 +6872,7 @@ async function slDetalle(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Solicitud</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.solicitudVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } c = r.solicitud; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const rows = [
     ['Estado', c.estado],
     ['Solicitud', c.solicitud || '—'],
@@ -6907,7 +6913,7 @@ async function slTzAgregar(id) {
     const res = $('#sl-tz-res'); if (res) res.textContent = r.resumen || '';
     if (r.card) slUpsert(r.card);
     toast('Bitácora actualizada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
   finally { if ($('#sl-tz-add')) { const b = $('#sl-tz-add'); b.disabled = false; b.innerHTML = `${I.plus} Agregar a la bitácora`; } }
 }
 
@@ -6924,7 +6930,7 @@ function slEstadoPicker(id) {
       const r = await api('priv.solicitudEstado', {}, 'POST', { id, estado: b.dataset.e, ...m5Auth() });
       if (!r.ok) { toast(r.msg || 'No se pudo cambiar', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); return; }
       closeLayer(); toast('Estado actualizado', 'ok'); slUpsert(r.card);
-    } catch (e) { toast('Error de conexión', 'err'); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
+    } catch (e) { fallaRed(e); layer.querySelectorAll('.estado-opt').forEach(x => x.disabled = false); }
   });
 }
 
@@ -6972,14 +6978,14 @@ function slAgregar() {
       if (($('#sl-q') || {}).value) $('#sl-q').value = '';
       $$('#sl-chips .bd-chip').forEach((x, i) => x.classList.toggle('active', i === 0));
       slUpsert(r.card);
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function slEditar(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Editar solicitud</h2>${loadingBox('Cargando…')}`);
   let c;
   try { const r = await api('priv.solicitudVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg, 'err'); } c = r.solicitud; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   openSheet(slFormHtml('Editar solicitud', c));
   slFillForm(c);
   $('#sl-save').onclick = async () => {
@@ -6990,7 +6996,7 @@ async function slEditar(id) {
       saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); toast('Solicitud actualizada', 'ok'); slUpsert(r.card);
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 async function slEliminar(id) {
@@ -7002,7 +7008,7 @@ async function slEliminar(id) {
     if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
     SL_ALL = SL_ALL.filter(x => String(x.id) !== String(id));
     slRecontar(); slApplyFilter(); toast('Solicitud eliminada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -7164,7 +7170,7 @@ async function viewNotificaciones(user) {
     NT_ALCANCE = r.alcance || 0; NT_PUSHTIT = r.pushTitulo || '';
     NT_FBLISTO = r.firebaseListo !== false; NT_FBMSG = r.firebaseMsg || '';
     ntPintarResumen(); ntApplyFilter();
-  } catch (e) { $('#nt-body').innerHTML = `<p class="muted center">Error de conexión.</p>`; return; }
+  } catch (e) { $('#nt-body').innerHTML = `${fallaHtml(e)}`; return; }
   const q = $('#nt-q'); let t;
   q.oninput = () => { clearTimeout(t); t = setTimeout(ntApplyFilter, 160); };
   $$('#nt-chips .bd-chip').forEach(ch => ch.onclick = () => ntSetFilter(ch.dataset.f));
@@ -7273,7 +7279,7 @@ async function ntDetalles(id) {
   openSheet(`<div class="grip"></div><h2 class="h2">Noticia</h2>${loadingBox('Cargando…')}`);
   let n;
   try { const r = await api('priv.notifVer', { id, ...m5Auth() }); if (!r.ok) { closeLayer(); return toast(r.msg || 'No se pudo cargar', 'err'); } n = r.noticia; }
-  catch (e) { closeLayer(); return toast('Error de conexión', 'err'); }
+  catch (e) { closeLayer(); return fallaRed(e); }
   const rows = [
     ['Estado', n.estado],
     ['Publicada', n.fecha ? (fmtCreada(n.fecha) || n.fecha) : '—'],
@@ -7354,7 +7360,7 @@ function ntAgregar() {
       if (r.push && r.push.msg) toast(r.push.msg, 'err');
       else if (enviar) { toast(`Publicada · push a ${(r.push && r.push.enviados) || 0} dispositivo(s)`, 'ok'); celebrarNt(); }
       else toast('Borrador guardado', 'ok');
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -7373,7 +7379,7 @@ function ntEditar(id) {
       saving(btn, false);
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       closeLayer(); ntUpsert(r.card); toast('Noticia actualizada', 'ok');
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -7407,7 +7413,7 @@ async function ntEnviar(id) {
       closeLayer(); ntUpsert(r.card);
       toast(r.msg || 'Push enviado', (r.push && r.push.enviados) ? 'ok' : 'err');
       if (r.push && r.push.enviados) celebrarNt();
-    } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (e) { saving(btn, false); fallaRed(e); }
   };
 }
 
@@ -7425,7 +7431,7 @@ async function ntEliminar(id) {
     if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
     NT_ALL = NT_ALL.filter(x => String(x.id) !== String(id));
     ntRecontar(); ntApplyFilter(); toast('Noticia eliminada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* Pequeño gesto al publicar */
@@ -8672,7 +8678,7 @@ async function cfGuardarClaves(btn, keys) {
     if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
     Object.assign(CF.d.cfg, cambios);
     toast('Guardado', 'ok');
-  } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(btn, false); fallaRed(e); }
 }
 
 /* ============================================================
@@ -9058,7 +9064,7 @@ function cfSubirInicio() {
         CF.d.cfg.INICIO_IMAGEN_DRIVE = r.imagen;
         toast(r.purgada ? 'Imagen cambiada. La anterior se borró de Drive.' : 'Imagen subida', 'ok');
         cfRepintarInicio();
-      } catch (e) { toast('Error de conexión', 'err'); }
+      } catch (e) { fallaRed(e); }
     };
     rd.onerror = () => toast('No pude leer el archivo', 'err');
     rd.readAsDataURL(f);
@@ -9077,7 +9083,7 @@ async function cfQuitarInicio(btn) {
     CF.d.cfg.INICIO_IMAGEN_DRIVE = '';
     toast('Imagen quitada', 'ok');
     cfRepintarInicio();
-  } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(btn, false); fallaRed(e); }
 }
 
 /* ============================================================
@@ -9245,7 +9251,7 @@ async function cfMapaAbrir() {
       const li = $('#cf-k-CASA_LAT'), lo = $('#cf-k-CASA_LNG');
       if (li) li.value = lat2; if (lo) lo.value = lng2;
       toast('Ubicación guardada', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9331,7 +9337,7 @@ async function cfDiaToggle(d) {
     const r = await api('priv.cfgCasaDia', {}, 'POST', Object.assign(cfAuth(), { dia: d.dia, activo: !d.activo }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.casa.dias = r.dias; cfPintaCasa();
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 function cfItemSheet(dia, item) {
@@ -9358,7 +9364,7 @@ function cfItemSheet(dia, item) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.casa.dias = r.dias; closeLayer(); cfPintaCasa(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9368,7 +9374,7 @@ async function cfItemBorrar(id) {
     const r = await api('priv.cfgCasaItemEliminar', {}, 'POST', Object.assign(cfAuth(), { id }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.casa.dias = r.dias; cfPintaCasa(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* La imagen anterior se BORRA DE VERDAD de Drive: se avisa antes. */
@@ -9388,7 +9394,7 @@ function cfImgSubir(dia) {
         const r = await api('priv.cfgCasaImagen', {}, 'POST', Object.assign(cfAuth(), { dia, dataUrl: rd.result }));
         if (!r.ok) return toast(r.msg || 'No se pudo subir', 'err');
         CF.d.casa.dias = r.dias; cfPintaCasa(); toast('Imagen actualizada', 'ok');
-      } catch (e) { toast('Error de conexión', 'err'); }
+      } catch (e) { fallaRed(e); }
     };
     rd.readAsDataURL(f);
   };
@@ -9403,7 +9409,7 @@ async function cfImgQuitar(dia) {
     const r = await api('priv.cfgCasaImagenQuitar', {}, 'POST', Object.assign(cfAuth(), { dia }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.casa.dias = r.dias; cfPintaCasa(); toast('Imagen quitada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* "www.youtube.com/@canal" → "https://www.youtube.com/@canal" (el CORE exige http/https) */
@@ -9457,7 +9463,7 @@ function cfRedSheet(red) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.casa.redes = r.redes; closeLayer(); cfPintaCasa(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9467,7 +9473,7 @@ async function cfRedBorrar(red) {
     const r = await api('priv.cfgRedEliminar', {}, 'POST', Object.assign(cfAuth(), { id: red.id }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.casa.redes = r.redes; cfPintaCasa(); toast('Eliminada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -9531,7 +9537,7 @@ function cfTelSheet(tel) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.emergencia = r.emergencia; closeLayer(); cfPintaEmergencia(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9541,7 +9547,7 @@ async function cfTelBorrar(tel) {
     const r = await api('priv.cfgTelEliminar', {}, 'POST', Object.assign(cfAuth(), { id: tel.id }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.emergencia = r.emergencia; cfPintaEmergencia(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -9612,7 +9618,7 @@ function cfServSheet(sv) {
       if (r.huerfanas) CF.d.huerfanas = r.huerfanas;
       closeLayer(); cfPintaServicios();
       toast(r.filas ? 'Guardado · ' + r.filas + ' registro(s) actualizados' : 'Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9622,7 +9628,7 @@ async function cfServBorrar(sv) {
     const r = await api('priv.cfgServEliminar', {}, 'POST', Object.assign(cfAuth(), { id: sv.id }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.servicios = r.servicios; cfPintaServicios(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 function cfAsignarSheet(h2) {
@@ -9649,7 +9655,7 @@ function cfAsignarSheet(h2) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.huerfanas = r.huerfanas; closeLayer(); cfPintaServicios(); toast('Responsable asignado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9704,7 +9710,7 @@ function cfProfSheet(pf) {
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.profesionales = r.profesionales; CF.d.servicios = r.servicios;
       closeLayer(); cfPintaProfesionales(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9717,7 +9723,7 @@ async function cfProfBorrar(pf) {
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.profesionales = r.profesionales; CF.d.servicios = r.servicios;
     cfPintaProfesionales(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -9770,7 +9776,7 @@ function cfZonaSheet(z) {
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.zonas = r.zonas; closeLayer(); cfPintaZonas();
       toast(r.filas ? r.nombre + ' · ' + r.filas + ' registro(s) actualizados' : 'Guardada como ' + r.nombre, 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9843,7 +9849,7 @@ async function cfTplGuardar(btn, i) {
     if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
     p.cuerpo = txt; CF.d.cfg[p.clave] = txt;
     toast('Plantilla guardada', 'ok');
-  } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(btn, false); fallaRed(e); }
 }
 
 /* ============================================================
@@ -9916,7 +9922,7 @@ function cfUserBienvenida(us) {
       CF.d.usuarios = r.usuarios || CF.d.usuarios;
       closeLayer(); cfPintaUsuarios();
       ldWaOpen(r.numero, r.texto);   // mismo abridor que usa Líderes (móvil vs PC)
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 
   $('#cf-bien-bot').onclick = async e => {
@@ -9927,7 +9933,7 @@ function cfUserBienvenida(us) {
       if (!r.ok) return toast(r.msg || 'No se pudo enviar', 'err');
       CF.d.usuarios = r.usuarios || CF.d.usuarios;
       closeLayer(); cfPintaUsuarios(); toast(r.msg || 'Bienvenida enviada', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -9981,7 +9987,7 @@ function cfUserSheet(us) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.usuarios = r.usuarios; closeLayer(); cfPintaUsuarios(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -10028,7 +10034,7 @@ function cfPermCaja(rol) {
       if (!r || !r.ok) { box.innerHTML = '<p class="muted small">No se pudo cargar el catálogo de permisos.</p>'; return; }
       CF_PERM_CAT = r; cfPermPintar();
     })
-    .catch(() => { box.innerHTML = '<p class="muted small">Error de conexión al cargar los permisos.</p>'; });
+    .catch((e) => { box.innerHTML = fallaHtml(e, 'priv.permCatalogo'); });
 }
 
 /* ---------- el catálogo del CORE, leído como lista de VISTAS ---------- */
@@ -10213,7 +10219,7 @@ function cfUserFoto(us) {
         CF.d.usuarios = r.usuarios; us.foto = r.foto;
         const p = $('#cf-us-prev'); if (p) { p.src = r.foto; p.style.visibility = 'visible'; }
         toast('Foto actualizada', 'ok');
-      } catch (e) { toast('Error de conexión', 'err'); }
+      } catch (e) { fallaRed(e); }
     };
     rd.readAsDataURL(f);
   };
@@ -10240,7 +10246,7 @@ async function cfUserFotoQuitar(us) {
     CF.d.usuarios = r.usuarios; us.foto = r.foto;
     const p = $('#cf-us-prev'); if (p) p.src = r.foto;
     toast('Foto quitada', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 async function cfUserBorrar(us) {
@@ -10249,7 +10255,7 @@ async function cfUserBorrar(us) {
     const r = await api('priv.cfgUsuarioEliminar', {}, 'POST', Object.assign(cfAuth(), { documento: us.documento }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.usuarios = r.usuarios; cfPintaUsuarios(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ============================================================
@@ -10344,7 +10350,7 @@ function cfCallUserSheet(u) {
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       CF.d.call = r.call; CFCALL = null;
       closeLayer(); cfPintaUsuarios(); toast('Guardado', 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -10361,7 +10367,7 @@ async function cfCallUserBorrar(u) {
     const r = await api('priv.cfgCallUsuarioEliminar', {}, 'POST', Object.assign(cfAuth(), { id: u.id }));
     if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
     CF.d.call = r.call; CFCALL = null; cfPintaUsuarios(); toast('Eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ---------- Pestaña Call Center ---------- */
@@ -10514,7 +10520,7 @@ async function cfCallGuardar(btn) {
     saving(btn, false);
     if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
     CF.d.call = r.call; cfCallCargar(); cfPintaCall(); toast('Configuración guardada', 'ok');
-  } catch (e) { saving(btn, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(btn, false); fallaRed(e); }
 }
 
 function cfPintaAvanzado() {
@@ -10615,7 +10621,7 @@ function cfPintaAvanzado() {
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       CF.d.cfg.CLAVE_ELIMINACION = v;
       toast(v ? 'Clave guardada' : 'Clave borrada: eliminación bloqueada', 'ok');
-    } catch (err) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(btn, false); fallaRed(err); }
   };
   $('#cf-bot-save').onclick = e => cfGuardarClaves(e.currentTarget,
     ['BB_API_URL', 'BB_API_KEY', 'BB_ENDPOINT_BASE', 'BB_BOT_ID', 'BB_PROJECT_ID', 'BB_MANAGER_API']);
@@ -10786,7 +10792,7 @@ function cfPuestoSheet(x) {
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF_PUESTOS = r.puestos || []; closeLayer(); cfPuestosPinta();
       toast(r.filas ? r.nombre + ' · ' + r.filas.toLocaleString('es-CO') + ' registro(s) actualizados' : 'Guardado como ' + r.nombre, 'ok');
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -10800,7 +10806,7 @@ async function cfPuestoEliminar(x) {
     if (!r.ok) return toast(r.msg || 'No se pudo eliminar', 'err');
     CF_PUESTOS = r.puestos || []; cfPuestosPinta();
     toast('Puesto eliminado', 'ok');
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 function cfEleccionBind() {
@@ -10827,7 +10833,7 @@ function cfEleccionBind() {
       if (!r.ok) return toast(r.msg || 'No se pudo guardar', 'err');
       Object.assign(CF.d.cfg, cambios);
       toast(cambios.ELECCION_FECHA ? 'Guardado' : 'Fecha borrada: los conteos quedan en ceros', 'ok');
-    } catch (err) { saving(btn, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(btn, false); fallaRed(err); }
   };
 }
 
@@ -10848,7 +10854,7 @@ function cfBotProbar() {
       saving(e.currentTarget, false);
       toast(r.msg || (r.ok ? 'Enviado' : 'No se pudo'), r.ok ? 'ok' : 'err');
       if (r.ok) closeLayer();
-    } catch (err) { saving(e.currentTarget, false); toast('Error de conexión', 'err'); }
+    } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
 
@@ -11034,7 +11040,7 @@ async function mbReiniciar() {
     saving(b, false);
     toast(r.msg || (r.ok ? 'Bot reiniciado' : 'No se confirmó'), r.ok ? 'ok' : 'err');
     setTimeout(() => mbEstado(), 2500);
-  } catch (e) { saving(b, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(b, false); fallaRed(e); }
 }
 
 async function mbMute() {
@@ -11052,7 +11058,7 @@ async function mbMute() {
       const l = $('#bot-mute-lbl'); if (l) l.textContent = nuevo ? 'Activar' : 'Silenciar';
     }
     toast(r.msg || 'Listo', r.ok ? 'ok' : 'err');
-  } catch (e) { saving(b, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(b, false); fallaRed(e); }
 }
 
 async function mbEliminarSesion() {
@@ -11067,7 +11073,7 @@ async function mbEliminarSesion() {
     saving(b, false);
     toast(r.msg || 'Listo', r.ok ? 'ok' : 'err');
     setTimeout(() => mbEstado(), 2500);
-  } catch (e) { saving(b, false); toast('Error de conexión', 'err'); }
+  } catch (e) { saving(b, false); fallaRed(e); }
 }
 
 /* ---------- Por contacto ---------- */
@@ -11079,7 +11085,7 @@ async function mbContacto(accion, titulo, queHace) {
     const r = await api(accion, {}, 'POST', Object.assign(mbAuth(), { numero: num }));
     toast(r.msg || 'Listo', r.ok ? 'ok' : 'err');
     if (r.ok && accion !== 'priv.botLimpiar') { $('#bot-num').value = ''; mbBlacklist(); }
-  } catch (e) { toast('Error de conexión', 'err'); }
+  } catch (e) { fallaRed(e); }
 }
 
 /* ---------- Lista de bloqueados ---------- */
@@ -11101,7 +11107,7 @@ async function mbBlacklist() {
         const r2 = await api('priv.botDesbloquear', {}, 'POST', Object.assign(mbAuth(), { numero: n }));
         toast(r2.msg || 'Listo', r2.ok ? 'ok' : 'err');
         if (r2.ok) mbBlacklist();
-      } catch (e) { toast('Error de conexión', 'err'); }
+      } catch (e) { fallaRed(e); }
     });
   } catch (e) { box.innerHTML = `<p class="small muted">No se pudo cargar la lista.</p>`; }
 }
