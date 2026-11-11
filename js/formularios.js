@@ -170,7 +170,8 @@
       it.menores ? 'Registro de menores' : '',
       it.cupo ? `Cupo ${Number(it.cupo).toLocaleString('es-CO')}` : 'Sin cupo',
       it.cierre ? `Cierra ${fmFechaCorta(it.cierre)}` : '',
-      it.varios ? 'Varios por documento' : ''
+      it.varios ? 'Varios por documento' : '',
+      it.origen === 'GOOGLE_FORMS' ? 'Importado de Google Forms' : ''
     ].filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('');
     const btn = (a, t, cls) => `<button class="bd-btn ${cls || ''}" data-a="${a}">${t}</button>`;
     let acts = '';
@@ -779,14 +780,14 @@
     };
   }
   function fmdCard(x) {
-    const sel = FMD.sel, puede = sel && !x.bd, on = puede && sel.has(x.documento);
+    const sel = FMD.sel, puede = sel && !x.bd && !!x.documento, on = puede && sel.has(x.documento);
     const est = x.asistio ? '<span class="fmd-est fmd-asis">Asistió</span>' : x.estado === 'ESPERA' ? '<span class="fmd-est fmd-esp">En espera</span>' : '';
     return `<article class="fmd-card ${x.bd ? 'fmd-enbd' : ''} ${on ? 'rf-on' : ''} ${sel && !puede ? 'fmd-nosel' : ''}" data-doc="${esc(x.documento)}" data-cod="${esc(x.codigo)}">
       ${puede ? `<input type="checkbox" class="rf-ck" ${on ? 'checked' : ''} aria-label="Seleccionar" />` : ''}
       ${avatarHtml(x.nombre, '')}
       <div class="rf-c-main">
         <b class="rf-c-nom">${esc(x.nombre || '—')}</b>
-        <span class="rf-c-sub">CC ${esc(x.documento)} · ${esc(x.whatsapp || '—')}</span>
+        <span class="rf-c-sub">${x.documento ? `CC ${esc(x.documento)}` : 'Sin documento'} · ${esc(x.whatsapp || '—')}</span>
         <span class="rf-c-res">${esc(x.residencia || '')}${x.fecha ? ` · ${esc(fmFechaCorta(x.fecha))}` : ''}</span>
         ${x.bd ? `<span class="fmd-lider">${I.users} ${esc(x.bd.lider || ('Líder #' + x.bd.ref))}${x.bd.ref ? ` · #${esc(x.bd.ref)}` : ''}</span>` : '<span class="fmd-fuera">No está en la base</span>'}
         <div class="fmd-resp" hidden></div>
