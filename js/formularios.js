@@ -722,7 +722,7 @@
         if (FMD !== yo || !$('#fmd-body')) return;
         if (!r || r.ok === false) { if (!yo.items) $('#fmd-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
         yo.items = r.items || []; yo.form = r.form || {}; fmdPintar();
-      }, fmdClave(it.id));
+      }, fmdClave(it.id), SILENCIO);   /* la hoja ya muestra esqueleto: sin cortina global que tape la hoja ni escudo que congele Cerrar */
     } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">Falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); }
   }
 

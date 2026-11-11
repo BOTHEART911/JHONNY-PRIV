@@ -211,7 +211,7 @@ const RAP_TRAER = {
 };
 function rapTraer(accion, p, op) { return RAP_TRAER[accion] ? RAP_TRAER[accion](p, op) : api(accion, p, 'GET', null, op); }
 
-async function rapCargar(accion, params, pintar, clave) {
+async function rapCargar(accion, params, pintar, clave, op) {   /* op: opciones de api para la 1.ª carga (11/11: SILENCIO cuando la vista ya pinta esqueleto) */
   RAP.setUsuario((getActive() || {}).documento || '');
   const k = clave || accion;
   const p = Object.assign({}, params, RAP.params());
@@ -229,7 +229,7 @@ async function rapCargar(accion, params, pintar, clave) {
       return d;
     } catch (e) { return c.data; }
   }
-  const d = await rapTraer(accion, p, {});
+  const d = await rapTraer(accion, p, op || {});
   if (d && d.ok !== false && !d.__copia) RAP.guardar(k, d, d.__rapCrudo || d);   /* 10/11 · la copia del equipo no pasa por fresca */
   pintar(d, false);
   return d;
