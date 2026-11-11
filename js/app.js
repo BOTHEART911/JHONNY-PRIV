@@ -1381,7 +1381,7 @@ function bdCardHtml(c) {
 }
 
 /* 09/11/2026 · VALIDACIÓN DE REGISTROS: sello con el motivo de POR CONFIRMAR
-   (NO APARECE EN CENSO / MUERTE) y el fallecimiento confirmado por el líder. */
+   (uno de CONS_MOTIVOS) y el fallecimiento confirmado por el líder. */
 function bdSelloMotivo(c) {
   const m = String(c.motivo || '').toUpperCase();
   if (!m) return '';
@@ -1990,7 +1990,10 @@ function bdConsultar(doc, card) {
    JHONNY-POSTCONSULTA (Validación de registros) y queda en la trazabilidad. */
 const CONS_MOTIVOS = [
   { v: 'NO APARECE EN CENSO', t: 'No aparece en censo', d: 'La Registraduría no lo encontró: puede estar mal escrito' },
-  { v: 'MUERTE', t: 'Muerte', d: 'La Registraduría lo reporta como fallecido' }
+  { v: 'MUERTE', t: 'Muerte', d: 'La Registraduría lo reporta como fallecido' },
+  /* 11/11/2026 · dos motivos más (mismo texto que guarda el CORE en MOTIVO_CONFIRMAR) */
+  { v: 'VIGENTE CON PERDIDA O SUSPENSION DE LOS DERECHOS POLITICOS', t: 'Vigente con pérdida o suspensión de los derechos políticos', d: 'La cédula está vigente, pero tiene los derechos políticos perdidos o suspendidos: no puede votar' },
+  { v: 'NO SE ENCUENTRA HABILITADO PARA VOTAR', t: 'No se encuentra habilitado para votar', d: 'La Registraduría lo reporta como no habilitado para votar' }
 ];
 const CONS_MARCAS = [
   { v: 'POR CONFIRMAR', d: 'Validar con el líder si el documento es correcto' },
@@ -2108,11 +2111,13 @@ const BD_LOTE_TANDA = 300;          // filas por llamada (el CORE tolera hasta 5
 const BD_LOTE_COLS = ['DOCUMENTO', 'DEPARTAMENTO', 'MUNICIPIO', 'PUESTO', 'DIRECCION', 'MESA', 'MOTIVO'];
 /* 09/11/2026 · columna G MOTIVO (solo para POR CONFIRMAR) y C con fórmula:
    al pegar un documento en A, C queda POR CONFIRMAR. */
-const BD_LOTE_MOTIVOS = ['NO APARECE EN CENSO', 'MUERTE'];
+const BD_LOTE_MOTIVOS = CONS_MOTIVOS.map(m => m.v);   /* 11/11/2026: los 4 de Consultar */
 const BD_LOTE_FILAS = 3000;   // filas con fórmula y lista en la plantilla
 function bdLoteMotivoNorm(v) {
   const s = String(v || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   if (!s) return '';
+  if (/DERECHOS|SUSPENSI|PERDIDA/.test(s)) return BD_LOTE_MOTIVOS[2];   /* 11/11/2026 */
+  if (/HABILITAD/.test(s)) return BD_LOTE_MOTIVOS[3];                    /* 11/11/2026 */
   if (/CENSO/.test(s)) return 'NO APARECE EN CENSO';
   if (/MUERT|FALLEC/.test(s)) return 'MUERTE';
   return '?';
@@ -2123,14 +2128,14 @@ function bdLotePlantillaBin(X) {
   const ws = X.utils.aoa_to_sheet([BD_LOTE_COLS.slice()]);
   for (let r = 2; r <= BD_LOTE_FILAS; r++) ws['C' + r] = { t: 's', v: '', f: `IF(A${r}<>"","POR CONFIRMAR","")` };
   ws['!ref'] = 'A1:G' + BD_LOTE_FILAS;
-  ws['!cols'] = BD_LOTE_COLS.map(c => ({ wch: c === 'MOTIVO' ? 24 : (c === 'DIRECCION' || c === 'PUESTO' ? 28 : 16) }));
+  ws['!cols'] = BD_LOTE_COLS.map(c => ({ wch: c === 'MOTIVO' ? 40 : (c === 'DIRECCION' || c === 'PUESTO' ? 28 : 16) }));
   const wb = X.utils.book_new();
   X.utils.book_append_sheet(wb, ws, 'PUESTOS');
   const bin = X.write(wb, { bookType: 'xlsx', type: 'array' });
   const z = X.CFB.read(new Uint8Array(bin), { type: 'array' });
   const ruta = z.FullPaths.find(p => /xl\/worksheets\/sheet1\.xml$/.test(p));
   let xml = new TextDecoder().decode(z.FileIndex[z.FullPaths.indexOf(ruta)].content);
-  const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige NO APARECE EN CENSO o MUERTE." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>"${BD_LOTE_MOTIVOS.join(',')}"</formula1></dataValidation></dataValidations>`;
+  const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige uno de los motivos de la lista." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>"${BD_LOTE_MOTIVOS.join(',')}"</formula1></dataValidation></dataValidations>`;
   /* Excel exige el ORDEN del esquema (CT_Worksheet): dataValidations va antes
      de todo esto. SheetJS escribe ignoredErrors al final; si la lista queda
      después, Excel declara el archivo dañado (09/11/2026). */
@@ -2199,7 +2204,7 @@ function bdLoteMasiva() {
       <ul class="lote-notas">
         <li>Con o sin fila de títulos, da igual.</li>
         <li>En la plantilla, al pegar un documento en A, <b>C queda POR CONFIRMAR</b> sola. Si pegas encima lo consultado, se reemplaza.</li>
-        <li><b>G Motivo</b> (lista): NO APARECE EN CENSO o MUERTE, solo para POR CONFIRMAR. Es lo que verá el líder en Validación de registros.</li>
+        <li><b>G Motivo</b> (lista): ${BD_LOTE_MOTIVOS.join(', ')}, solo para POR CONFIRMAR. Es lo que verá el líder en Validación de registros.</li>
         <li>La columna A manda: se actualiza la fila de ese documento.</li>
         <li><b>Celda vacía borra el dato.</b> Una fila con solo “POR CONFIRMAR” en C deja el resto en blanco.</li>
         <li>Formatos: .xlsx o .csv</li>
