@@ -8436,6 +8436,13 @@ let CF_ME = '', CF = null;
 
 /* Cada módulo lleva su propio caller (auth()/BD_ME es solo de Base de Datos) */
 function cfAuth() { return { caller: CF_ME }; }
+/* 11/11/2026 · Agenda: el CORE solo ANOTA en la cola quién debe entrar o
+   salir del Google Calendar (un INVITADO nunca). Aquí se dispara de fondo,
+   sin esperar ni avisar: si falla, lo termina el reloj horario del CORE. */
+function cfAgAcceso(r) {
+  if (!r || !r.agAcceso) return;
+  try { api('priv.agAcceso', {}, 'POST', cfAuth()).catch(() => {}); } catch (e) {}
+}
 
 /* Normaliza para comparar/buscar: sin acentos y en mayúsculas.
    (norm() no es global en esta app: es una const local de otro módulo.) */
@@ -10005,6 +10012,7 @@ function cfUserSheet(us) {
       saving(e.currentTarget, false);
       if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
       CF.d.usuarios = r.usuarios; closeLayer(); cfPintaUsuarios(); toast('Guardado', 'ok');
+      cfAgAcceso(r);
     } catch (err) { saving(e.currentTarget, false); fallaRed(err); }
   };
 }
@@ -10273,6 +10281,7 @@ async function cfUserBorrar(us) {
     const r = await api('priv.cfgUsuarioEliminar', {}, 'POST', Object.assign(cfAuth(), { documento: us.documento }));
     if (!r.ok) return toast(r.msg || 'No se pudo', 'err');
     CF.d.usuarios = r.usuarios; cfPintaUsuarios(); toast('Eliminado', 'ok');
+    cfAgAcceso(r);
   } catch (e) { fallaRed(e); }
 }
 
