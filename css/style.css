@@ -2707,13 +2707,13 @@ body.wide-xl .an-tabs { max-width: 640px; }
 .cfg-vp { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 .cfg-vp-fila { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, transparent); }
 .cfg-vp-fila.off { opacity: .72; }
-.pcm-lista { display: grid; gap: 10px; }
-.pcm-fila { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, transparent); }
+.pcm-lista { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.pcm-fila { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, transparent); }
 .pcm-fila.off { opacity: .68; }
 .pcm-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .pcm-ic { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #FFF4E0; color: #92400E; }
 .pcm-ic svg { width: 18px; height: 18px; }
-.pcm-abrir { flex: 1 1 180px; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.pcm-abrir { flex: 1 1 140px; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
 .pcm-txt { min-width: 0; display: flex; flex-direction: column; }
 .pcm-tit { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcm-sub { font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
