@@ -9,6 +9,12 @@
  *    inscripción). Sin sondeo.
  *  · Estados: CREADO (editar · eliminar · encender) → ENCENDIDO (enviar ·
  *    apagar) → APAGADO (reusar). Encender y apagar piden confirmación.
+ *  · 11/11/2026: la edición se bloquea con el PRIMER REGISTRO, no al
+ *    encender. Un APAGADO sin registros (it.editable, lo dice el CORE) se
+ *    edita o se elimina; al guardar vuelve a CREADO y se puede encender otra
+ *    vez. Con un CORE viejo no llega editable y no aparece el botón.
+ *  · «¿Vives en <municipio>?» Sí/No antes de RESIDENCIA (fijo; con No se
+ *    salta la residencia). La residencia se busca escribiendo.
  *  · Constructor: campos fijos (DOCUMENTO, NOMBRE, WHATSAPP, RESIDENCIA) +
  *    campos configurables con validaciones, condiciones y orden arrastrando.
  *    Vista previa con las condiciones funcionando.
@@ -48,9 +54,11 @@
       { k: 'documento', t: 'DOCUMENTO' + s, d: 'Número, 5 a 10 dígitos' },
       { k: 'nombre', t: 'NOMBRE' + s, d: 'Nombre completo' },
       { k: 'whatsapp', t: 'WHATSAPP' + s, d: 'Celular de 10 dígitos' },
-      { k: 'residencia', t: 'RESIDENCIA', d: 'Barrio, vereda o conjunto' }
+      { k: 'vf', t: `¿VIVES EN ${fmMuni().toUpperCase()}?`, d: 'Sí / No · con No se salta la residencia' },
+      { k: 'residencia', t: 'RESIDENCIA', d: 'Barrio, vereda o conjunto · se busca escribiendo · solo si vive aquí' }
     ];
   }
+  function fmMuni() { return String((window.MARCA && MARCA.MUNICIPIO) || 'Flandes'); }
   window.fmFijos = fmFijos;
 
   /* =========================================================== LA VISTA */
@@ -166,7 +174,7 @@
     const n = fmN(it);
     const cupo = it.cupo ? ` / ${Number(it.cupo).toLocaleString('es-CO')}` : '';
     const meta = [
-      `${(it.campos || []).length + 4} campos`,
+      `${(it.campos || []).length + 5} campos`,
       it.menores ? 'Registro de menores' : '',
       it.cupo ? `Cupo ${Number(it.cupo).toLocaleString('es-CO')}` : 'Sin cupo',
       it.cierre ? `Cierra ${fmFechaCorta(it.cierre)}` : '',
@@ -177,6 +185,7 @@
     let acts = '';
     if (it.estado === 'CREADO') acts = btn('editar', 'Editar') + btn('previa', 'Vista previa') + btn('encender', `${ICO_POWER} Encender`, 'fm-btn-on') + btn('eliminar', 'Eliminar', 'bd-btn-danger');
     else if (it.estado === 'ENCENDIDO') acts = btn('enviar', `${I.wa} Enviar`, 'fm-btn-wa') + btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('apagar', `${ICO_POWER} Apagar`, 'fm-btn-off');
+    else if (it.editable === true) acts = btn('editar', 'Editar') + btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`) + btn('eliminar', 'Eliminar', 'bd-btn-danger');
     else acts = btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`);
     return `<article class="fm-card fm-${it.estado.toLowerCase()}" data-id="${esc(it.id)}">
       <div class="fm-img">${it.imagen ? `<img src="${esc(it.imagen)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : ICO_FORM}${fmEstadoHtml(it)}</div>
@@ -185,6 +194,7 @@
         <div class="fm-n ${it.estado === 'CREADO' ? 'fm-n-off' : ''}"><b>${n.toLocaleString('es-CO')}</b><span>inscrito(s)${cupo}${it.espera ? ` · ${it.espera} en espera` : ''}</span>${it.estado === 'ENCENDIDO' && !it.cerrado ? '<i class="fm-vivo">EN VIVO</i>' : ''}</div>
         <div class="fm-meta">${meta}</div>
         <p class="fm-sub">${it.estado === 'CREADO' ? 'Creado' : it.estado === 'ENCENDIDO' ? 'Encendido' : 'Apagado'} ${esc(fmFechaCorta(it.estado === 'CREADO' ? it.creado : it.estado === 'ENCENDIDO' ? it.encendido : it.apagado))}${it.autor ? ` · por ${esc(it.autor)}` : ''}</p>
+        ${it.estado === 'APAGADO' && it.editable === true ? '<p class="fm-sub fm-sub-ed">Sin registros: se puede editar y volver a encender.</p>' : ''}
         <div class="bd-acts fm-acts">${acts}</div>
       </div>
     </article>`;
@@ -222,8 +232,8 @@
   }
 
   async function fmEncender(it, btn) {
-    const ok = await confirmar('¿Encender este formulario?', crow('Formulario', it.nombre) + crow('Campos', String((it.campos || []).length + 4)) +
-      `<p class="muted small" style="margin-top:8px;">Queda visible en la web para inscribirse. <b>Desde ese momento ya no se puede editar</b>: si hace falta cambiar algo, se apaga y se reusa.</p>`);
+    const ok = await confirmar('¿Encender este formulario?', crow('Formulario', it.nombre) + crow('Campos', String((it.campos || []).length + 5)) +
+      `<p class="muted small" style="margin-top:8px;">Queda visible en la web para inscribirse. <b>Encendido no se edita.</b> Si hace falta un cambio y nadie se ha registrado, se apaga y se edita; con registros, se reusa.</p>`);
     if (!ok) return;
     const b = $(`.fm-card[data-id="${CSS.escape(it.id)}"] [data-a="encender"]`) || btn;
     const r = await fmEscribir(b, 'priv.formEncender', { id: it.id });
@@ -233,17 +243,18 @@
   }
 
   async function fmApagar(it, btn) {
+    const sinReg = !fmN(it) && !it.espera;
     const ok = await confirmar('¿Apagar este formulario?', crow('Formulario', it.nombre) + crow('Inscritos', fmN(it).toLocaleString('es-CO')) +
-      `<p class="muted small" style="margin-top:8px;">Deja de recibir inscripciones. <b>No se puede volver a encender</b>; luego podrás reusarlo con otro nombre.</p>`);
+      `<p class="muted small" style="margin-top:8px;">Deja de recibir inscripciones. ${sinReg ? 'Como no tiene registros, <b>podrás editarlo y volver a encenderlo</b>.' : '<b>Ya tiene registros: no se vuelve a editar</b>; podrás reusarlo con otro nombre.'}</p>`);
     if (!ok) return;
     const b = $(`.fm-card[data-id="${CSS.escape(it.id)}"] [data-a="apagar"]`) || btn;
     const r = await fmEscribir(b, 'priv.formApagar', { id: it.id });
     if (!r) return;
-    fmUpsert(r.item); toast('Formulario apagado', 'ok');
+    fmUpsert(r.item); toast(r.item.editable ? 'Apagado. Sin registros: ya lo puedes editar.' : 'Formulario apagado', 'ok');
   }
 
   async function fmEliminar(it, btn) {
-    const ok = await confirmar('¿Eliminar este formulario?', crow('Formulario', it.nombre) + `<p class="muted small" style="margin-top:8px;">Está en estado CREADO (nadie se ha inscrito). Esta acción no se puede deshacer.</p>`);
+    const ok = await confirmar('¿Eliminar este formulario?', crow('Formulario', it.nombre) + `<p class="muted small" style="margin-top:8px;">No tiene registros (nadie se ha inscrito). Esta acción no se puede deshacer.</p>`);
     if (!ok) return;
     const b = $(`.fm-card[data-id="${CSS.escape(it.id)}"] [data-a="eliminar"]`) || btn;
     const r = await fmEscribir(b, 'priv.formEliminar', { id: it.id });
@@ -304,6 +315,7 @@
     openSheet(`<div class="grip"></div>
       <div class="fm-ed-head"><h2 class="h2">${c.id ? 'Editar formulario' : 'Crear formulario'}</h2>
         <button class="btn btn-quiet fm-ed-prev" id="fm-ed-prev">${ICO_EYE} Vista previa</button></div>
+      ${c.estado === 'APAGADO' ? '<p class="fm-ed-aviso">Está APAGADO y sin registros. Al guardar vuelve a <b>CREADO</b> (el enlace anterior deja de funcionar) y lo puedes encender de nuevo.</p>' : ''}
       <div class="fm-ed" id="fm-ed"></div>
       <div class="fm-ed-foot"><p class="fm-err" id="fm-ed-err"></p>
         <button class="btn btn-primary btn-block" id="fm-ed-save">${c.id ? 'Guardar cambios' : 'Crear formulario'}</button></div>`, 'sheet-xl fm-sheet');
@@ -337,7 +349,7 @@
 
       <section class="fm-sec">
         <h3 class="fm-h3">2 · Campos fijos</h3>
-        <div class="fm-fijos">${fmFijos(ED.menores).map(f => `<div class="fm-fijo"><b>${esc(f.t)}</b><span>${esc(f.d)} · obligatorio</span></div>`).join('')}</div>
+        <div class="fm-fijos">${fmFijos(ED.menores).map(f => `<div class="fm-fijo"><b>${esc(f.t)}</b><span>${esc(f.d)}${f.k === 'residencia' ? '' : ' · obligatorio'}</span></div>`).join('')}</div>
         <label class="fm-check"><input type="checkbox" id="fm-men" ${ED.menores ? 'checked' : ''}/> <span><b>Registro de menores</b><small>Los datos de arriba pasan a ser los del adulto responsable.</small></span></label>
         ${ED.menores ? `<div class="fm-aviso">${I.bell}<div><b>Configura los campos del menor</b><span>Agrega abajo los datos del niño o la niña (nombre, documento, fecha de nacimiento…).</span>
           ${fmTieneCamposMenor() ? '' : '<button type="button" class="btn btn-quiet" id="fm-men-add">Agregar campos del menor</button>'}</div></div>` : ''}
@@ -675,7 +687,7 @@
     if (!r) return;
     document.removeEventListener('paste', fmPegar);
     closeLayer(); fmUpsert(r.item);
-    toast(ED.id ? 'Cambios guardados' : 'Formulario creado. Revísalo y enciéndelo cuando esté listo.', 'ok');
+    toast(r.reabierto ? 'Cambios guardados. Quedó en CREADO: enciéndelo cuando esté listo.' : ED.id ? 'Cambios guardados' : 'Formulario creado. Revísalo y enciéndelo cuando esté listo.', 'ok');
     ED = null;
   }
 
@@ -910,10 +922,10 @@
     try {
       const X = await cargarXlsx();
       const campos = (FMD.form && FMD.form.campos) || [];
-      const cab = ['CÓDIGO', 'FECHA', 'DOCUMENTO', 'NOMBRE', 'WHATSAPP', 'RESIDENCIA', 'ESTADO', 'ASISTIÓ', 'EN LA BASE', 'LÍDER'].concat(campos.map(c => c.etiqueta.toUpperCase()));
+      const cab = ['CÓDIGO', 'FECHA', 'DOCUMENTO', 'NOMBRE', 'WHATSAPP', 'RESIDENCIA', `VIVE EN ${fmMuni().toUpperCase()}`, 'ESTADO', 'ASISTIÓ', 'EN LA BASE', 'LÍDER'].concat(campos.map(c => c.etiqueta.toUpperCase()));
       const aoa = [cab].concat(lista.map(x => {
         const r = x.r || {};
-        return [x.codigo, x.fecha, x.documento, x.nombre, x.whatsapp, x.residencia, x.estado, x.asistio || '', x.bd ? 'SÍ' : 'NO', x.bd ? `${x.bd.lider || ''}${x.bd.ref ? ' (#' + x.bd.ref + ')' : ''}` : '']
+        return [x.codigo, x.fecha, x.documento, x.nombre, x.whatsapp, x.residencia, x.vf === 'NO' ? 'NO' : x.vf === 'SI' ? 'SÍ' : '', x.estado, x.asistio || '', x.bd ? 'SÍ' : 'NO', x.bd ? `${x.bd.lider || ''}${x.bd.ref ? ' (#' + x.bd.ref + ')' : ''}` : '']
           .concat(campos.map(c => { const v = r[c.id]; if (v == null) return ''; if (Array.isArray(v)) return v.join(', '); if (typeof v === 'object') return v.fid ? 'https://drive.google.com/file/d/' + v.fid + '/view' : ''; return v; }));
       }));
       const ws = X.utils.aoa_to_sheet(aoa);
@@ -948,14 +960,22 @@
         <h2 class="fmr-tit">${esc(def.nombre || 'Formulario sin nombre')}</h2>
         ${def.cupo ? `<p class="fmr-cupo">Cupo: ${Number(def.cupo).toLocaleString('es-CO')} personas</p>` : ''}
         <form class="fmr-form" novalidate>
-          ${fijos.map(f => `<label class="fmr-f"><span>${esc(f.t)} *</span>${f.k === 'residencia' ? `<select class="input"><option>Selecciona tu barrio, vereda o conjunto</option></select>` : `<input class="input" ${f.k === 'nombre' ? '' : 'inputmode="numeric"'} placeholder="${esc(f.d)}" />`}</label>`).join('')}
+          ${fijos.map(f => f.k === 'vf'
+            ? `<div class="fmr-f" data-fijo="vf"><span>¿Vives en ${esc(fmMuni())}? *</span><div class="fmr-ops fmr-sino"><label class="fmr-op"><input type="radio" name="_vf" value="SI" /> <span>Sí</span></label><label class="fmr-op"><input type="radio" name="_vf" value="NO" /> <span>No</span></label></div></div>`
+            : f.k === 'residencia'
+              ? `<label class="fmr-f" data-fijo="residencia" hidden><span>${esc(f.t)} *</span><input class="input" placeholder="Escribe para buscar tu barrio, vereda o conjunto" autocomplete="off" /></label>`
+              : `<label class="fmr-f"><span>${esc(f.t)} *</span><input class="input" ${f.k === 'nombre' ? '' : 'inputmode="numeric"'} placeholder="${esc(f.d)}" /></label>`).join('')}
           ${(def.campos || []).map(c => FMR.campo(c)).join('')}
           <label class="fmr-ley"><input type="checkbox" /> <span>Autorizo el tratamiento de mis datos personales conforme a la Ley 1581 de 2012. *</span></label>
           <button type="button" class="btn btn-primary btn-block" ${op.previa ? 'disabled' : ''}>Inscribirme</button>
           ${op.previa ? '<p class="muted small center">En la vista previa no se envía nada.</p>' : ''}
         </form>`;
       const form = root.querySelector('form');
-      const aplicar = () => FMR.condiciones(form, def.campos || []);
+      const aplicar = () => {
+        const vf = form.querySelector('[name="_vf"]:checked'), res = form.querySelector('[data-fijo="residencia"]');
+        if (res) res.hidden = !(vf && vf.value === 'SI');
+        return FMR.condiciones(form, def.campos || []);
+      };
       form.addEventListener('change', aplicar); form.addEventListener('input', aplicar);
       aplicar();
     },

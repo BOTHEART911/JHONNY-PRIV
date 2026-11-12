@@ -217,3 +217,9 @@ html.oscuro .fmd-fuera, html.oscuro .fmd-esp { background: #3a2a0c; color: #F5C2
 html.oscuro .fmd-lider { color: #6fe0b0; }
 @media (max-width: 520px) { .fmd-grid { grid-template-columns: 1fr; } }
 .fmd-resp[hidden] { display: none !important; }
+
+/* 11/11/2026 · APAGADO sin registros: se edita · «¿Vives en …?» en la vista previa */
+.fm-sub-ed { color: var(--brand); font-weight: 600; }
+.fm-ed-aviso { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--brand-050); color: var(--ink); font-size: 13px; line-height: 1.4; }
+.fmr-sino { flex-direction: row; }
+.fmr-sino .fmr-op { flex: 1 1 0; justify-content: center; }
