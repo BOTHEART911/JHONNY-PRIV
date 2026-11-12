@@ -3,14 +3,16 @@
  * ----------------------------------------------------------------------------
  * Muestra cuántos registros ACTIVOS están POR CONFIRMAR (de la lista ya
  * cargada: cero viajes) y abre WhatsApp nativo, sin número fijo, con la
- * plantilla PLANTILLA_VALIDACION (Configuración → Plantillas). {enlace} sale de
- * CONFIG POSTCONSULTA_URL (Configuración → Enlaces) o, de respaldo, de
- * marca.js; {nombre_candidato} de MARCA_CANDIDATO_NOMBRE. Marca blanca.
- * La plantilla, el enlace y el candidato llegan dentro de priv.baseDatos (pc).
+ * plantilla PLANTILLA_VALIDACION (Configuración → Plantillas): {n} = cuántos
+ * POR CONFIRMAR, {nombre_candidato} = MARCA_CANDIDATO_NOMBRE. Marca blanca.
+ * La plantilla y el candidato llegan dentro de priv.baseDatos (pc).
+ * 12/11/2026 · Sin enlace: los líderes validan en PERDOMO → Mis referidos
+ * (la app JHONNY-POSTCONSULTA se retiró). Si una plantilla vieja trae
+ * {enlace}, esa línea se quita del mensaje.
  * ============================================================================ */
 (function () {
   'use strict';
-  var DEF = 'Buen día estimados lideres:\n\nLa base de dato se ha actualizado y tenemos algunos documentos por validar, por favor ingresar a revisar si tienes alguno a alguno de tus ahijados.\n\nIngresa aquí: {enlace}\n\nCordialmente,\n\n*Consultorio Externa*\n{nombre_candidato}';
+  var DEF = 'Buen día estimados líderes:\n\nLa base de datos se actualizó y hay {n} documentos por validar. Por favor revisen si tienen alguno ustedes o sus ahijados en la app: zona de líderes → Mis referidos.\n\nCordialmente,\n\n*Consultorio Externa*\n{nombre_candidato}';
 
   function pendientes() {
     if (typeof BD_ALL === 'undefined') return 0;
@@ -32,17 +34,17 @@
   window.bdValTexto = function (n) {
     var pc = window.BD_PC || {};
     var M = window.MARCA || {};
-    var enlace = String(pc.url || M.POSTCONSULTA_URL || '').trim();
     var cand = String(pc.candidato || (window.MV && MV.candidato) || M.CANDIDATO || '').trim();
     var tpl = String(pc.plantilla || DEF);
-    return { enlace: enlace, texto: tpl.replace(/\{enlace\}/g, enlace).replace(/\{nombre_candidato\}/g, cand).replace(/\{n\}/g, String(n)) };
+    var texto = tpl.replace(/^[^\n]*\{enlace\}[^\n]*(\n|$)/gm, '').replace(/\n{3,}/g, '\n\n')
+      .replace(/\{nombre_candidato\}/g, cand).replace(/\{n\}/g, String(n));
+    return { texto: texto };
   };
 
   window.bdValEnviar = function () {
     var n = window.bdValContar();
     if (!n) { if (window.toast) toast('No hay registros POR CONFIRMAR para validar', 'ok'); return; }
     var t = window.bdValTexto(n);
-    if (!t.enlace) { if (window.toast) toast('Falta el enlace de "Validación de registros" en Configuración → Enlaces', 'err'); return; }
     var movil = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     var url = movil ? ('whatsapp://send?text=' + encodeURIComponent(t.texto)) : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(t.texto));
     window.open(url, '_blank');

@@ -1991,8 +1991,8 @@ function bdConsultar(doc, card) {
    Registraduría (sin DEPARTAMENTO/PUESTO/DIRECCION/MESA). Al marcar uno se
    bloquea el área de pegado; al guardar solo se escribe la columna
    MUNICIPIO (H) con ese texto, nada más. */
-/* 09/11/2026 · POR CONFIRMAR exige el motivo. Lo ve el líder en
-   JHONNY-POSTCONSULTA (Validación de registros) y queda en la trazabilidad. */
+/* 09/11/2026 · POR CONFIRMAR exige el motivo. Lo ve el líder en PERDOMO →
+   Mis referidos (antes JHONNY-POSTCONSULTA) y queda en la trazabilidad. */
 /* 11/11/2026 · los motivos ya no están fijos: salen de Configuración →
    Avanzado (CORE Motivos_PC.gs, llegan en priv.baseDatos · pc.motivos).
    Sin ellos, los 4 de fábrica (js/motivos-pc.js). Solo los ACTIVOS. */
@@ -8512,9 +8512,8 @@ const CF_APPS = [
   ['APP_ASISTENCIA_URL', 'App de asistencias', 'El escáner de kiosco de los eventos.', 'ASISTENCIA'],
   ['APP_VOTACION_URL', 'App de votación', 'El escáner de kiosco del día de elecciones.', 'VOTACIÓN'],
   /* 6ª app (17/07/2026): el call center. */
-  ['APP_CENTER_URL', 'App del call center', 'La de los usuarios CALL. Su acceso se configura en la pestaña Call Center.', 'CALL CENTER'],
-  /* 09/11/2026 · web de los líderes para validar los registros POR CONFIRMAR. */
-  ['POSTCONSULTA_URL', 'Validación de registros', 'La de los líderes para validar los documentos POR CONFIRMAR. Es el {enlace} del botón VALIDACIÓN de Base de datos.', 'VALIDACIÓN']
+  ['APP_CENTER_URL', 'App del call center', 'La de los usuarios CALL. Su acceso se configura en la pestaña Call Center.', 'CALL CENTER']
+  /* 12/11/2026 · se quitó POSTCONSULTA_URL: la validación vive en PERDOMO → Mis referidos */
 ];
 
 /* AJUSTE 23/07/2026 · "Otros enlaces" e "Imágenes y marca" salieron de la
