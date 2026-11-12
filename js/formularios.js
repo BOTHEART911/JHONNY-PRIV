@@ -15,6 +15,10 @@
  *    vez. Con un CORE viejo no llega editable y no aparece el botón.
  *  · «¿Vives en <municipio>?» Sí/No antes de RESIDENCIA (fijo; con No se
  *    salta la residencia). La residencia se busca escribiendo.
+ *  · 12/11/2026: AJUSTAR un ENCENDIDO aunque tenga registros: cupo (nunca
+ *    menor que los inscritos), cierre automático y varios por documento
+ *    (priv.formAjustar, un viaje). Solo si el CORE marca it.ajustable.
+ *    SIN lista de espera: cupo lleno = la web ya no recibe más.
  *  · Constructor: campos fijos (DOCUMENTO, NOMBRE, WHATSAPP, RESIDENCIA) +
  *    campos configurables con validaciones, condiciones y orden arrastrando.
  *    Vista previa con las condiciones funcionando.
@@ -43,6 +47,8 @@
   const svgT = t => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${(TIPO[t] || TIPOS[0]).ic}</svg>`;
   const ICO_FORM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>';
   const ICO_DRAG = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+  /* Ajustar = controles deslizantes (cupo, cierre) */
+  const ICO_AJUSTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>';
   const ICO_POWER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><path d="M12 2v10"/></svg>';
   const ICO_EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
   window.ICO_FORM = ICO_FORM;
@@ -184,7 +190,7 @@
     const btn = (a, t, cls) => `<button class="bd-btn ${cls || ''}" data-a="${a}">${t}</button>`;
     let acts = '';
     if (it.estado === 'CREADO') acts = btn('editar', 'Editar') + btn('previa', 'Vista previa') + btn('encender', `${ICO_POWER} Encender`, 'fm-btn-on') + btn('eliminar', 'Eliminar', 'bd-btn-danger');
-    else if (it.estado === 'ENCENDIDO') acts = btn('enviar', `${I.wa} Enviar`, 'fm-btn-wa') + btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('apagar', `${ICO_POWER} Apagar`, 'fm-btn-off');
+    else if (it.estado === 'ENCENDIDO') acts = btn('enviar', `${I.wa} Enviar`, 'fm-btn-wa') + btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + (it.ajustable === true ? btn('ajustar', `${ICO_AJUSTE} Ajustar`) : '') + btn('previa', 'Vista previa') + btn('apagar', `${ICO_POWER} Apagar`, 'fm-btn-off');
     else if (it.editable === true) acts = btn('editar', 'Editar') + btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`) + btn('eliminar', 'Eliminar', 'bd-btn-danger');
     else acts = btn('detalles', `${I.users} Detalles`, 'fm-btn-det') + btn('previa', 'Vista previa') + btn('reusar', `${I.repeat} Reusar`);
     return `<article class="fm-card fm-${it.estado.toLowerCase()}" data-id="${esc(it.id)}">
@@ -210,6 +216,7 @@
   function fmAccion(a, id, btn) {
     const it = fmFind(id); if (!it) return;
     if (a === 'editar') return fmEditor(it);
+    if (a === 'ajustar') return fmAjustar(it);
     if (a === 'previa') return fmPrevia(it);
     if (a === 'encender') return fmEncender(it, btn);
     if (a === 'apagar') return fmApagar(it, btn);
@@ -233,7 +240,7 @@
 
   async function fmEncender(it, btn) {
     const ok = await confirmar('¿Encender este formulario?', crow('Formulario', it.nombre) + crow('Campos', String((it.campos || []).length + 5)) +
-      `<p class="muted small" style="margin-top:8px;">Queda visible en la web para inscribirse. <b>Encendido no se edita.</b> Si hace falta un cambio y nadie se ha registrado, se apaga y se edita; con registros, se reusa.</p>`);
+      `<p class="muted small" style="margin-top:8px;">Queda visible en la web para inscribirse. Encendido se puede <b>ajustar</b> el cupo, el cierre y si se permiten varios por documento; las preguntas ya no. Si hace falta cambiar preguntas y nadie se ha registrado, se apaga y se edita; con registros, se reusa.</p>`);
     if (!ok) return;
     const b = $(`.fm-card[data-id="${CSS.escape(it.id)}"] [data-a="encender"]`) || btn;
     const r = await fmEscribir(b, 'priv.formEncender', { id: it.id });
@@ -261,6 +268,54 @@
     if (!r) return;
     FM_ALL = FM_ALL.filter(x => x.id !== it.id);
     rapSync('priv.formularios', FM_ALL); fmPintar(); toast('Formulario eliminado', 'ok');
+  }
+
+  /* ============================================================== AJUSTAR
+     12/11/2026 · Encendido (con o sin registros): cupo, cierre y varios. Las
+     preguntas y el nombre no se tocan (el nombre es el enlace compartido). */
+  function fmAjustar(it) {
+    const m = String(it.cierre || '').match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
+    const AJ = { cupo: it.cupo ? String(it.cupo) : '', f: m ? m[1] : '', h: m ? m[2] : '', varios: !!it.varios };
+    const n = fmN(it);
+    const pintar = () => {
+      openSheet(`<div class="grip"></div><h2 class="h2">Ajustar formulario</h2>
+        <p class="muted small" style="margin:4px 0 12px;"><b>${esc(it.nombre)}</b> sigue encendido. Los cambios valen desde la próxima inscripción; las preguntas no se tocan.</p>
+        <div class="stack">
+          ${field('Cupo máximo', `<input class="input" id="fa-cupo" inputmode="numeric" placeholder="Sin límite" value="${esc(AJ.cupo)}" />`)}
+          <p class="muted small fa-nota">${n ? `Ya hay <b>${n.toLocaleString('es-CO')}</b> inscrito(s): el cupo no puede ser menor. ` : ''}Cuando se llene, la web ya no recibe más (sin lista de espera).</p>
+          <div class="field"><span>Cierre automático</span>
+            <div class="fm-cierre">
+              <button type="button" class="input datebtn ${AJ.f ? '' : 'vacio'}" id="fa-f"><span class="datebtn-tx">${AJ.f ? esc(fechaLargaISO(AJ.f)) : 'Sin cierre'}</span><span class="datebtn-ic">📅</span></button>
+              <input class="input" type="time" id="fa-h" value="${esc(AJ.h)}" ${AJ.f ? '' : 'disabled'} />
+              ${AJ.f ? '<button type="button" class="icon-btn fm-x" id="fa-fx" aria-label="Quitar cierre">' + I.x + '</button>' : ''}
+            </div>
+          </div>
+          <label class="fm-check"><input type="checkbox" id="fa-var" ${AJ.varios ? 'checked' : ''}/> <span><b>Permitir varios registros por documento</b><small>Apagado: un documento se inscribe una sola vez.</small></span></label>
+          <p class="fm-err" id="fa-err"></p>
+          <button class="btn btn-primary btn-block" id="fa-go">Guardar ajustes</button>
+        </div>`);
+      $('#fa-cupo').oninput = e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); AJ.cupo = e.target.value; };
+      $('#fa-h').onchange = e => { AJ.h = e.target.value; };
+      $('#fa-var').onchange = e => { AJ.varios = e.target.checked; };
+      $('#fa-f').onclick = () => abrirRuedaFecha(AJ.f, iso => { AJ.f = iso; if (!AJ.h) AJ.h = '18:00'; pintar(); }, { minHoy: true, anios: true });
+      const fx = $('#fa-fx'); if (fx) fx.onclick = () => { AJ.f = ''; AJ.h = ''; pintar(); };
+      $('#fa-go').onclick = guardar;
+    };
+    const guardar = async () => {
+      const cupo = AJ.cupo ? parseInt(AJ.cupo, 10) : '';
+      const cierre = AJ.f ? `${AJ.f} ${AJ.h || '23:59'}` : '';
+      let err = '';
+      if (cupo !== '' && !(cupo >= 1)) err = 'El cupo debe ser mayor que cero';
+      else if (cupo !== '' && cupo < n) err = `Ya hay ${n} inscrito(s): el cupo no puede ser menor`;
+      else if (cierre && !(new Date(cierre.replace(' ', 'T') + ':00-05:00').getTime() > Date.now())) err = 'La fecha de cierre ya pasó';
+      $('#fa-err').textContent = err;
+      if (err) return;
+      const r = await fmEscribir($('#fa-go'), 'priv.formAjustar', { id: it.id, cupo, cierre, varios: AJ.varios });
+      if (!r) return;
+      closeLayer(); fmUpsert(r.item);
+      toast(r.fb === false ? 'Ajustes guardados. La web los verá en unos segundos.' : 'Ajustes guardados', 'ok');
+    };
+    pintar();
   }
 
   function fmReusar(it) {
@@ -373,7 +428,7 @@
             </div>
           </div>
         </div>
-        <p class="muted small">Con cupo, quien llegue después de llenarse queda en <b>lista de espera</b>.</p>
+        <p class="muted small">Con cupo, cuando se llene la web ya no recibe más inscripciones. Encendido, el cupo y el cierre se pueden <b>ajustar</b>.</p>
         <label class="fm-check"><input type="checkbox" id="fm-var" ${ED.varios ? 'checked' : ''}/> <span><b>Permitir varios registros por documento</b><small>Apagado: un documento se inscribe una sola vez en este formulario.</small></span></label>
         <div class="fm-ley">${I.lock}<span>Al final de cada formulario va siempre la casilla obligatoria de <b>autorización de tratamiento de datos (Ley 1581 de 2012)</b>.</span></div>
       </section>`;

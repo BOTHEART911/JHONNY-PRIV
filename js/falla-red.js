@@ -70,7 +70,7 @@
     'priv.cfgUsuarioFotoQuitar': 'quitar la foto del usuario', 'priv.lideresExcel': 'descargar el Excel de los líderes', 'priv.lideresPdf': 'generar el PDF de los líderes',
     'priv.liderReferidosExcel': 'descargar el Excel de los referidos', 'priv.botBloquear': 'bloquear el número', 'priv.botLimpiar': 'limpiar el bot',
     'priv.dashExcel': 'descargar el Excel del tablero', 'priv.dashPdf': 'generar el PDF del tablero', 'priv.formAgregarBd': 'pasar los registros a la base de datos',
-    'priv.formApagar': 'apagar el formulario', 'priv.formEncender': 'encender el formulario', 'priv.formReusar': 'reutilizar el formulario',
+    'priv.formApagar': 'apagar el formulario', 'priv.formAjustar': 'ajustar el formulario', 'priv.formEncender': 'encender el formulario', 'priv.formReusar': 'reutilizar el formulario',
     'voto.pdf': 'generar el PDF de la votación', 'voto.ver': 'cargar la votación',
     'pub.residencias': 'cargar los barrios'
   };

@@ -122,6 +122,7 @@
     ['#fm-add', 'fm.crear'],
     ['#fm-add2', 'fm.crear'],
     ['#fm-body [data-a="editar"]', 'fm.editar'],
+    ['#fm-body [data-a="ajustar"]', 'fm.editar'],
     ['#fm-body [data-a="eliminar"]', 'fm.eliminar'],
     ['#fm-body [data-a="encender"]', 'fm.encender'],
     ['#fm-body [data-a="apagar"]', 'fm.apagar'],
