@@ -1375,7 +1375,9 @@ function bdCardHtml(c) {
       <button class="bd-btn" data-a="detalles">Detalles</button>
       <button class="bd-btn" data-a="editar">Editar</button>
       <button class="bd-btn" data-a="consultar">Consultar</button>
-      <button class="bd-btn bd-btn-danger" data-a="inactivar" ${inact ? 'disabled' : ''}>Inactivar</button>
+      ${bdPorEliminar(c)
+        ? '<button class="bd-btn bd-btn-danger" data-a="eliminar">Eliminar</button>'
+        : `<button class="bd-btn bd-btn-danger" data-a="inactivar" ${inact ? 'disabled' : ''}>Inactivar</button>`}
     </div>
   </article>`;
 }
@@ -1386,7 +1388,9 @@ function bdSelloMotivo(c) {
   const m = String(c.motivo || '').toUpperCase();
   if (!m) return '';
   const mun = String(c.municipio || '').toUpperCase();
-  if (/FALLECIDO/.test(m)) return `<div class="bd-sello bd-sello-muerte">${esc(m)}</div>`;
+  if (/FALLECIDO/.test(m)) return bdPorEliminar(c)
+    ? `<div class="bd-sello bd-sello-elim">Fallecido · confirmado por el líder · <b>pendiente por eliminar</b></div>`
+    : `<div class="bd-sello bd-sello-muerte">${esc(m)}</div>`;
   if (mun !== 'POR CONFIRMAR') return '';
   /* 11/11/2026 · motivos de Configuración (js/motivos-pc.js): el de la acción
      de fallecimiento sale en gris; el texto, el título corto del motivo. */
@@ -1416,6 +1420,7 @@ async function viewBaseDatos(user) {
       </div>
       <div class="bd-chips" id="bd-chips">
         ${['Todos',MV.municipio,'Sin consultar','A la espera','Por confirmar','Otros','Inactivos'].map((t,i)=>`<button class="bd-chip ${i===0?'active':''}" data-f="${esc(t)}">${esc(t)} <span class="bd-chip-n" data-n></span></button>`).join('')}
+        <button class="bd-chip bd-chip-elim" data-f="Por eliminar" hidden title="Fallecidos confirmados por el líder: revisa y elimina">Por eliminar <span class="bd-chip-n" data-n></span></button>
       </div>
       <div class="bd-chips bd-chips-int" id="bd-chips-int"></div>
       <div class="bd-lidbar">
@@ -1716,7 +1721,13 @@ function bdRegMs(c) {
    lista, los conteos de las pastillas y la tendencia por mes (bd-tablero.js)
    cuenten EXACTAMENTE lo mismo. bdPasaChip = pastilla de municipio/estado;
    bdPasaResto = búsqueda, líder e intención (sinInt: sin mirar intención). */
+/* 12/11/2026 · PENDIENTE POR ELIMINAR: el líder confirmó el fallecimiento en
+   PERDOMO → Mis referidos (pub.pcFallecido: ESTADO INACTIVO + MOTIVO_CONFIRMAR
+   «FALLECIDO (CONFIRMADO POR EL LÍDER)»). Aquí se ven en su pastilla y se
+   eliminan con la clave de eliminación (bd.eliminar). */
+function bdPorEliminar(c) { return c && c.estado === 'INACTIVO' && /FALLECIDO/.test(String(c.motivo || '').toUpperCase()); }
 function bdPasaChip(c, f) {
+  if (f === 'Por eliminar') return bdPorEliminar(c);
   if (f === 'Inactivos') return c.estado === 'INACTIVO';
   if (c.estado === 'INACTIVO') return false;            /* ocultos salvo en pestaña Inactivos */
   const mun = String(c.municipio || '').trim().toUpperCase();
@@ -1822,6 +1833,7 @@ function bdAccion(a, doc) {
   if (a === 'editar') return bdEditar(doc);
   if (a === 'consultar') return bdConsultar(doc, card);
   if (a === 'inactivar') return bdInactivar(doc, card);
+  if (a === 'eliminar') return bdEliminar(doc, card);   /* 12/11/2026 · pendiente por eliminar */
 }
 
 /* ---- DETALLES ---- */

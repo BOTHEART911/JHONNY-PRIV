@@ -102,6 +102,8 @@
     document.querySelectorAll('#bd-chips .bd-chip').forEach(function (b) {
       var s = b.querySelector('.bd-chip-n'); if (!s) return;
       var t = n(r.chips[b.dataset.f]); if (s.textContent !== t) s.textContent = t;
+      /* 12/11/2026 · «Por eliminar» solo se ve si hay alguno (o si está marcada) */
+      if (b.dataset.f === 'Por eliminar') b.hidden = !r.chips[b.dataset.f] && !b.classList.contains('active');
     });
     document.querySelectorAll('#bd-chips-int .bd-chip-int').forEach(function (b) {
       var s = b.querySelector('.bd-chip-n'); if (!s) return;
