@@ -2707,4 +2707,23 @@ body.wide-xl .an-tabs { max-width: 640px; }
 .cfg-vp { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 .cfg-vp-fila { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, transparent); }
 .cfg-vp-fila.off { opacity: .72; }
+.pcm-lista { display: grid; gap: 10px; }
+.pcm-fila { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface, transparent); }
+.pcm-fila.off { opacity: .68; }
+.pcm-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.pcm-ic { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #FFF4E0; color: #92400E; }
+.pcm-ic svg { width: 18px; height: 18px; }
+.pcm-abrir { flex: 1 1 180px; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.pcm-txt { min-width: 0; display: flex; flex-direction: column; }
+.pcm-tit { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcm-sub { font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcm-cuerpo { display: none; padding-top: 4px; }
+.pcm-fila.abierto .pcm-cuerpo { display: block; }
+.pcm-fila .pcm-cab { margin-bottom: 0; }
+.pcm-fila.abierto .pcm-cab { margin-bottom: 8px; }
+.pcm-mv { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-weight: 700; cursor: pointer; }
+.pcm-mv:disabled { opacity: .35; cursor: default; }
+.pcm-muerte { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; font-size: .8rem; color: var(--muted); }
+.pcm-muerte input { margin-top: 2px; }
+:root[data-theme="dark"] .pcm-ic { background: #3A2A10; color: #FCD9A0; }
 .cfg-vp-d { font-size: .74rem; color: var(--muted); padding-left: 49px; line-height: 1.3; }

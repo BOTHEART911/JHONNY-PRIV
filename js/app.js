@@ -1388,7 +1388,12 @@ function bdSelloMotivo(c) {
   const mun = String(c.municipio || '').toUpperCase();
   if (/FALLECIDO/.test(m)) return `<div class="bd-sello bd-sello-muerte">${esc(m)}</div>`;
   if (mun !== 'POR CONFIRMAR') return '';
-  return `<div class="bd-sello ${m === 'MUERTE' ? 'bd-sello-muerte' : ''}">Motivo: ${esc(m === 'MUERTE' ? 'POSIBLE FALLECIMIENTO' : m)}</div>`;
+  /* 11/11/2026 · motivos de Configuración (js/motivos-pc.js): el de la acción
+     de fallecimiento sale en gris; el texto, el título corto del motivo. */
+  const mo = window.MOTIVOS_PC ? MOTIVOS_PC.de(m) : null;
+  const muerte = mo ? !!mo.muerte : m === 'MUERTE';
+  const txt = mo ? String(mo.t || mo.v).toUpperCase() : (m === 'MUERTE' ? 'POSIBLE FALLECIMIENTO' : m);
+  return `<div class="bd-sello ${muerte ? 'bd-sello-muerte' : ''}">Motivo: ${esc(txt)}</div>`;
 }
 
 async function viewBaseDatos(user) {
@@ -1975,7 +1980,7 @@ function bdConsultar(doc, card) {
       } catch (e) { fallaRed(e); saving(btn, false); }
     };
   };
-  consMarcas(doc);   // 25/07: checks POR CONFIRMAR / A LA ESPERA (solo casos nuevos)
+  consMarcas(doc, card);   // 25/07: checks POR CONFIRMAR / A LA ESPERA (solo casos nuevos) · 11/11: al instante con la tarjeta
 }
 
 /* ---- 25/07 · Checks de estado en "Consultar puesto de votación" ----
@@ -1988,27 +1993,37 @@ function bdConsultar(doc, card) {
    MUNICIPIO (H) con ese texto, nada más. */
 /* 09/11/2026 · POR CONFIRMAR exige el motivo. Lo ve el líder en
    JHONNY-POSTCONSULTA (Validación de registros) y queda en la trazabilidad. */
-const CONS_MOTIVOS = [
-  { v: 'NO APARECE EN CENSO', t: 'No aparece en censo', d: 'La Registraduría no lo encontró: puede estar mal escrito' },
-  { v: 'MUERTE', t: 'Muerte', d: 'La Registraduría lo reporta como fallecido' },
-  /* 11/11/2026 · dos motivos más (mismo texto que guarda el CORE en MOTIVO_CONFIRMAR) */
-  { v: 'VIGENTE CON PERDIDA O SUSPENSION DE LOS DERECHOS POLITICOS', t: 'Vigente con pérdida o suspensión de los derechos políticos', d: 'La cédula está vigente, pero tiene los derechos políticos perdidos o suspendidos: no puede votar' },
-  { v: 'NO SE ENCUENTRA HABILITADO PARA VOTAR', t: 'No se encuentra habilitado para votar', d: 'La Registraduría lo reporta como no habilitado para votar' }
-];
+/* 11/11/2026 · los motivos ya no están fijos: salen de Configuración →
+   Avanzado (CORE Motivos_PC.gs, llegan en priv.baseDatos · pc.motivos).
+   Sin ellos, los 4 de fábrica (js/motivos-pc.js). Solo los ACTIVOS. */
+function consMotivos() {
+  return (window.MOTIVOS_PC ? MOTIVOS_PC.activos() : []).map(m => ({ v: m.v, t: m.t || m.v, d: m.d || '' }));
+}
 const CONS_MARCAS = [
   { v: 'POR CONFIRMAR', d: 'Validar con el líder si el documento es correcto' },
   { v: 'A LA ESPERA',   d: 'No aparece aún en el censo de Registraduría' }
 ];
-async function consMarcas(doc) {
+/* 11/11/2026 · AL INSTANTE: la tarjeta ya trae municipio, puesto, mesa y
+   motivo (priv.baseDatos fmt=2), así que las opciones se pintan sin esperar
+   priv.persona (medido 3,2-4,3 s). El CORE revisa la fila fresca al guardar
+   (puestoSinConsulta_). Solo una tarjeta vieja sin esos campos va al servidor. */
+async function consMarcas(doc, card) {
   let p = null;
-  try { const r = await api('priv.persona', { documento: doc, ...auth() }); if (r && r.ok) p = r.persona; } catch (e) { return; }
+  const t0 = performance.now();
+  if (card && card.puestoCrudo !== undefined && card.mesa !== undefined) {
+    p = { MUNICIPIO: card.municipio, PUESTO: card.puestoCrudo, MESA: card.mesa, MOTIVO_CONFIRMAR: card.motivo };
+  } else {
+    try { const r = await api('priv.persona', { documento: doc, ...auth() }); if (r && r.ok) p = r.persona; } catch (e) { return; }
+  }
   if (!p) return;
   const box = $('#cons-marks');
   if (!box || box.dataset.doc !== String(doc)) return;            // el modal se cerró o ya es el de otra persona
   const lleno = (k) => String(p[k] || '').trim() !== '';
   if (lleno('DEPARTAMENTO') || lleno('PUESTO') || lleno('DIRECCION') || lleno('MESA')) return;  // ya consultado
   const actual = String(p['MUNICIPIO'] || '').trim().toUpperCase();
-  const actualMot = String(p['MOTIVO_CONFIRMAR'] || '').trim().toUpperCase();   /* 09/11/2026 */
+  const motObj = window.MOTIVOS_PC ? MOTIVOS_PC.de(p['MOTIVO_CONFIRMAR']) : null;   /* 09/11/2026 · 11/11: también por texto anterior */
+  const actualMot = motObj ? motObj.v : String(p['MOTIVO_CONFIRMAR'] || '').trim().toUpperCase();
+  const CONS_MOTIVOS = consMotivos();
 
   box.innerHTML = `<div class="cons-marks">
     <p class="eyebrow" style="margin:14px 0 6px;">O márcalo sin consultar</p>
@@ -2061,6 +2076,7 @@ async function consMarcas(doc) {
     } catch (e) { fallaRed(e); saving(save, false); }
   };
   pintar();
+  if (window.RED && RED.pantalla) RED.pantalla('bd.consultarMarcas', performance.now() - t0);
 }
 
 /* Parser tolerante del texto pegado de la Registraduría.
@@ -2111,17 +2127,10 @@ const BD_LOTE_TANDA = 300;          // filas por llamada (el CORE tolera hasta 5
 const BD_LOTE_COLS = ['DOCUMENTO', 'DEPARTAMENTO', 'MUNICIPIO', 'PUESTO', 'DIRECCION', 'MESA', 'MOTIVO'];
 /* 09/11/2026 · columna G MOTIVO (solo para POR CONFIRMAR) y C con fórmula:
    al pegar un documento en A, C queda POR CONFIRMAR. */
-const BD_LOTE_MOTIVOS = CONS_MOTIVOS.map(m => m.v);   /* 11/11/2026: los 4 de Consultar */
+/* 11/11/2026 · los ACTIVOS de Configuración (js/motivos-pc.js) */
+function bdLoteMotivos() { return window.MOTIVOS_PC ? MOTIVOS_PC.activos().map(m => m.v) : []; }
 const BD_LOTE_FILAS = 3000;   // filas con fórmula y lista en la plantilla
-function bdLoteMotivoNorm(v) {
-  const s = String(v || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (!s) return '';
-  if (/DERECHOS|SUSPENSI|PERDIDA/.test(s)) return BD_LOTE_MOTIVOS[2];   /* 11/11/2026 */
-  if (/HABILITAD/.test(s)) return BD_LOTE_MOTIVOS[3];                    /* 11/11/2026 */
-  if (/CENSO/.test(s)) return 'NO APARECE EN CENSO';
-  if (/MUERT|FALLEC/.test(s)) return 'MUERTE';
-  return '?';
-}
+function bdLoteMotivoNorm(v) { return window.MOTIVOS_PC ? MOTIVOS_PC.norm(v) : (String(v || '').trim() ? '?' : ''); }   /* 11/11/2026 · igual que pcMotivoNorm_ */
 /* Plantilla: SheetJS arma el libro; la lista desplegable de G se inyecta en
    el XML de la hoja (SheetJS no escribe validaciones) con su propio CFB. */
 function bdLotePlantillaBin(X) {
@@ -2131,16 +2140,22 @@ function bdLotePlantillaBin(X) {
   ws['!cols'] = BD_LOTE_COLS.map(c => ({ wch: c === 'MOTIVO' ? 40 : (c === 'DIRECCION' || c === 'PUESTO' ? 28 : 16) }));
   const wb = X.utils.book_new();
   X.utils.book_append_sheet(wb, ws, 'PUESTOS');
+  /* 11/11/2026 · la lista vive en una hoja oculta MOTIVOS: los motivos salen de
+     Configuración y en línea Excel no admite más de 255 caracteres ni comas. */
+  const mots = bdLoteMotivos();
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(mots.map(m => [m])), 'MOTIVOS');
+  wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
   const bin = X.write(wb, { bookType: 'xlsx', type: 'array' });
   const z = X.CFB.read(new Uint8Array(bin), { type: 'array' });
   const ruta = z.FullPaths.find(p => /xl\/worksheets\/sheet1\.xml$/.test(p));
   let xml = new TextDecoder().decode(z.FileIndex[z.FullPaths.indexOf(ruta)].content);
-  const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige uno de los motivos de la lista." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>"${BD_LOTE_MOTIVOS.join(',')}"</formula1></dataValidation></dataValidations>`;
+  const dv = `<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorStyle="stop" errorTitle="Motivo no válido" error="Elige uno de los motivos de la lista." promptTitle="Motivo" prompt="Solo si MUNICIPIO (C) es POR CONFIRMAR." sqref="G2:G${BD_LOTE_FILAS}"><formula1>MOTIVOS!$A$1:$A$${Math.max(1, mots.length)}</formula1></dataValidation></dataValidations>`;
   /* Excel exige el ORDEN del esquema (CT_Worksheet): dataValidations va antes
      de todo esto. SheetJS escribe ignoredErrors al final; si la lista queda
      después, Excel declara el archivo dañado (09/11/2026). */
   const tras = /<(hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)([ >\/])/;
-  xml = tras.test(xml) ? xml.replace(tras, dv + '<$1$2') : xml.replace('</worksheet>', dv + '</worksheet>');
+  /* 11/11/2026 · reemplazo con función: dv lleva $A$1 y replace lo tomaría como grupo */
+  xml = tras.test(xml) ? xml.replace(tras, (m0, g1, g2) => dv + '<' + g1 + g2) : xml.replace('</worksheet>', () => dv + '</worksheet>');
   X.CFB.utils.cfb_add(z, ruta, new TextEncoder().encode(xml));
   return X.CFB.write(z, { fileType: 'zip', type: 'array', compression: true });
 }
@@ -2204,7 +2219,7 @@ function bdLoteMasiva() {
       <ul class="lote-notas">
         <li>Con o sin fila de títulos, da igual.</li>
         <li>En la plantilla, al pegar un documento en A, <b>C queda POR CONFIRMAR</b> sola. Si pegas encima lo consultado, se reemplaza.</li>
-        <li><b>G Motivo</b> (lista): ${BD_LOTE_MOTIVOS.join(', ')}, solo para POR CONFIRMAR. Es lo que verá el líder en Validación de registros.</li>
+        <li><b>G Motivo</b> (lista): ${bdLoteMotivos().join(', ')}, solo para POR CONFIRMAR. Es lo que verá el líder en Validación de registros.</li>
         <li>La columna A manda: se actualiza la fila de ese documento.</li>
         <li><b>Celda vacía borra el dato.</b> Una fila con solo “POR CONFIRMAR” en C deja el resto en blanco.</li>
         <li>Formatos: .xlsx o .csv</li>
@@ -8583,7 +8598,9 @@ const CF_INICIO_KEYS = ['INICIO_IMAGEN_DRIVE', 'INICIO_REEL_URL'];
 const CF_OCULTAS = ['INICIO_IMAGEN_ID', 'ALERTA_BOT_FALLOS', 'ALERTA_BOT_ULTIMA_ALERTA', 'BOT_SILENCIADO', 'REFIERE_URL',
   'AGENDA_CANDIDATO_NOMBRE',
   /* 08/11/2026 · tienen su sección propia (Vistas de la app pública) */
-  'PUB_VISTAS_APAGADAS', 'PUB_VISTAS_POR', 'PUB_VISTAS_FECHA'];
+  'PUB_VISTAS_APAGADAS', 'PUB_VISTAS_POR', 'PUB_VISTAS_FECHA',
+  /* 11/11/2026 · tienen su tarjeta propia (Avanzado → Motivos de POR CONFIRMAR) */
+  'PC_MOTIVOS_CFG', 'PC_MOTIVOS_POR', 'PC_MOTIVOS_FECHA'];
 
 /* ---------- MARCA DE CAMPANA (27/07/2026 · Fase 2) ----------
    Las llaves que hacen replicable el ecosistema. Tienen tarjeta propia en
@@ -10639,7 +10656,12 @@ function cfPintaAvanzado() {
      </div>
      <div class="cfg-actions"><button class="btn btn-primary" id="cf-agestr-save">Guardar</button></div>`);
 
-  $('#cf-body').innerHTML = cfMarcaCard() + cfEleccionCard() + bot + infra + elim + agestr;
+  /* 11/11/2026 · motivos de POR CONFIRMAR (js/motivos-pc.js · CORE Motivos_PC.gs) */
+  const pcm = window.MOTIVOS_PC ? cfCard('📋 Motivos de POR CONFIRMAR',
+    'Los que se eligen en Base de datos → Consultar, en la plantilla de carga masiva y los que ve el líder en Validación de registros. Cambian según lo que reporte la Registraduría. No se borran: se desactivan, y los registros que ya los tienen se siguen leyendo.',
+    MOTIVOS_PC.inner(cfg)) : '';
+  $('#cf-body').innerHTML = cfMarcaCard() + cfEleccionCard() + pcm + bot + infra + elim + agestr;
+  if (window.MOTIVOS_PC) MOTIVOS_PC.bind();
   $('#cf-agestr-save').onclick = e => cfGuardarClaves(e.currentTarget, ['AGENDA_ESTRICTA']);
   const elimInp = $('#cf-k-CLAVE_ELIMINACION');
   if (elimInp) { elimInp.setAttribute('inputmode', 'numeric'); elimInp.setAttribute('maxlength', '6'); onlyDigits(elimInp); }
