@@ -69,7 +69,7 @@
 
   /* =========================================================== LA VISTA */
   async function viewFormularios(user) {
-    FM_ME = user.documento; appWide(true, true);
+    FM_ME = user.documento; appWide(true, true); fmdPrecargado = false;
     app.innerHTML = `${backbar('Formularios')}
       <div class="pad">
         <div class="bd-toolbar">
@@ -98,6 +98,7 @@
         primera = false;
         FM_ALL = r.items || [];
         fmPintar();
+        fmdPrecarga();
       });
     } catch (e) { if ($('#fm-body') && primera) $('#fm-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">El servidor todavía no tiene Formularios: falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); return; }
     vivoBind('formularios', FM_ME, fmVivo);
@@ -759,10 +760,34 @@
   const FMD_TANDA = 60;
 
   function fmdClave(id) { return 'priv.formRegistros:' + id; }
+  /* 13/11/2026 · Detalles en silencio pero en PRIMER plano (ya:true): con
+     SILENCIO solo iba a la cola de fondo y podía esperar detrás de otras
+     lecturas (refresco de la lista, precargas). */
+  const FMD_LEER = { silent: true, ya: true };
+  /* 13/11/2026 · Precarga de Detalles al entrar a Formularios: los 2 más
+     probables (encendidos primero, luego el más reciente) se traen de FONDO
+     (cola de red.js, máx. 2, se descartan al cambiar de vista) y quedan en la
+     caché de sesión: al tocar Detalles la hoja se pinta al instante. Mismos
+     parámetros que rapCargar → si aún está en vuelo, Detalles la hereda. */
+  let fmdPrecargado = false;
+  function fmdPrecarga() {
+    if (fmdPrecargado || !FM_ALL.length) return;
+    fmdPrecargado = true;
+    RAP.setUsuario((getActive() || {}).documento || '');
+    const orden = FM_ALL.filter(x => x.estado !== 'CREADO' && (x.n || x.reg))
+      .sort((a, b) => ((b.estado === 'ENCENDIDO') - (a.estado === 'ENCENDIDO')) || (a.creado < b.creado ? 1 : a.creado > b.creado ? -1 : 0));
+    orden.slice(0, 2).forEach(it => {
+      if (RAP.tomar(fmdClave(it.id))) return;
+      const p = Object.assign({}, Object.assign(fmAuth(), { id: it.id }), RAP.params());
+      api('priv.formRegistros', p, 'GET', null, SILENCIO)
+        .then(r => { if (r && r.ok !== false && !r.__copia && !RAP.tomar(fmdClave(it.id))) RAP.guardar(fmdClave(it.id), r, r.__rapCrudo || r); })
+        .catch(() => {});
+    });
+  }
   async function fmDetalles(it) {
     FMD = { it, id: it.id, n: fmN(it), items: null, form: null, filtro: 'todos', sel: null, mostrados: 0 };
     openSheet(`<div class="grip"></div>
-      <div class="det-head"><h2 class="h2">Detalles · ${esc(it.nombre)}</h2><span class="ld-refs" id="fmd-tot">…</span></div>
+      <div class="det-head"><h2 class="h2">Detalles · ${esc(it.nombre)}</h2><span class="ld-refs" id="fmd-tot">${FMD.n.toLocaleString('es-CO')} inscrito(s)</span></div>
       <div class="fmd-kpis" id="fmd-kpis"></div>
       <section class="asis-sec">
         <div class="asis-head">
@@ -783,13 +808,15 @@
     });
     $('#fmd-xls').onclick = fmdExcel;
     $('#fmd-body').addEventListener('click', fmdClic);
-    const yo = FMD;
+    const yo = FMD, t0 = performance.now();
     try {
-      await rapCargar('priv.formRegistros', Object.assign(fmAuth(), { id: it.id }), (r) => {
+      await rapCargar('priv.formRegistros', Object.assign(fmAuth(), { id: it.id }), (r, deCache) => {
         if (FMD !== yo || !$('#fmd-body')) return;
         if (!r || r.ok === false) { if (!yo.items) $('#fmd-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
+        const primera = !yo.items;
         yo.items = r.items || []; yo.form = r.form || {}; fmdPintar();
-      }, fmdClave(it.id), SILENCIO);   /* la hoja ya muestra esqueleto: sin cortina global que tape la hoja ni escudo que congele Cerrar */
+        if (primera) try { RED.pantalla && RED.pantalla('fm.detalles' + (deCache ? '.cache' : ''), performance.now() - t0); } catch (e) {}
+      }, fmdClave(it.id), FMD_LEER);   /* la hoja ya muestra esqueleto: sin cortina global ni escudo; 13/11: sin la cola de fondo (es lo que el usuario pidió) */
     } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">Falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); }
   }
 
