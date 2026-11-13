@@ -223,3 +223,25 @@ html.oscuro .fmd-lider { color: #6fe0b0; }
 .fm-ed-aviso { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--brand-050); color: var(--ink); font-size: 13px; line-height: 1.4; }
 .fmr-sino { flex-direction: row; }
 .fmr-sino .fmr-op { flex: 1 1 0; justify-content: center; }
+
+/* 13/11/2026 · Detalles: llamar, WhatsApp, confirmar y descartar por inscrito */
+.fmd-acc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.fmd-ic { width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--line, #E3E9F2); background: var(--surface, #fff); display: inline-grid; place-items: center; cursor: pointer; padding: 0; flex: 0 0 auto; }
+.fmd-ic svg { width: 17px; height: 17px; }
+.fmd-ic-tel { color: var(--brand-700, #0056B3); background: var(--brand-050, rgba(0,123,255,.08)); border-color: transparent; }
+.fmd-ic-wa { color: #fff; background: #1E9E6A; border-color: transparent; }
+.fmd-ic-quitar { color: #8A4B00; background: #FFF4E5; border-color: transparent; }
+.fmd-btn-conf, .fmd-btn-desc { height: 36px; border-radius: 12px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: .82rem; cursor: pointer; border: 1px solid transparent; }
+.fmd-btn-conf svg, .fmd-btn-desc svg { width: 16px; height: 16px; }
+.fmd-btn-conf { color: #137a52; background: rgba(30,158,106,.13); }
+.fmd-btn-desc { color: #B42318; background: rgba(217,45,32,.09); }
+.fmd-btn-conf:disabled, .fmd-btn-desc:disabled, .fmd-ic:disabled { opacity: .6; cursor: default; }
+.fmd-conf { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: .76rem; font-weight: 700; color: #0f6b47; background: rgba(30,158,106,.16); padding: 3px 9px; border-radius: 999px; max-width: 100%; white-space: normal; }
+.fmd-conf svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.fmd-card.fmd-confirmado { border-color: rgba(30,158,106,.55); box-shadow: inset 4px 0 0 #1E9E6A; }
+.fmd-ov.fmd-ov-fijo { position: fixed; z-index: 75; border-radius: 0; }
+.fmd-btn-desc-ok { background: #D92D20; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.fmd-btn-desc-ok svg { width: 17px; height: 17px; }
+:root[data-theme="dark"] .fmd-ic-quitar { background: rgba(255,170,60,.15); color: #FFB547; }
+:root[data-theme="dark"] .fmd-btn-desc { color: #FF8A80; }
+@media (max-width: 520px) { .fmd-btn-desc { width: 36px; padding: 0; justify-content: center; } .fmd-btn-desc .fmd-lbl { display: none; } }

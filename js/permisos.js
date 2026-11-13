@@ -132,6 +132,9 @@
     ['#fm-body [data-a="detalles"]', 'fm.detalles'],
     ['#fmd-xls', 'fm.excel'],
     ['#fmd-sel', 'fm.agregarBd'],
+    ['#fmd-body [data-fa="confirmar"]', 'fm.confirmar'],   /* 13/11/2026 */
+    ['#fmd-body [data-fa="quitar"]', 'fm.confirmar'],
+    ['#fmd-body [data-fa="descartar"]', 'fm.descartar'],
     /* ---- Notificaciones ---- */
     ['#nt-add', 'nt.crear'],
     ['#nt-body [data-a="editar"]', 'nt.editar'],

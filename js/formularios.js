@@ -770,7 +770,7 @@
           <button class="btn btn-ghost asis-xls" id="fmd-xls" hidden>${I.download} Excel</button>
         </div>
         <div class="bd-chips" id="fmd-chips">
-          ${[['todos', 'Todos'], ['base', 'En la base'], ['fuera', 'No están']].map(([k, t]) => `<button class="bd-chip ${k === 'todos' ? 'active' : ''}" data-f="${k}">${t}<i></i></button>`).join('')}
+          ${[['todos', 'Todos'], ['base', 'En la base'], ['fuera', 'No están'], ['conf', 'Confirmados'], ['sinconf', 'Sin confirmar']].map(([k, t]) => `<button class="bd-chip ${k === 'todos' ? 'active' : ''}" data-f="${k}" ${k === 'conf' || k === 'sinconf' ? 'hidden' : ''}>${t}<i></i></button>`).join('')}
         </div>
         <div class="rf-acts" id="fmd-acts"></div>
         <div id="fmd-body">${Array(4).fill('<div class="fmd-card fm-skel"><i></i><i></i></div>').join('')}</div>
@@ -809,20 +809,35 @@
     } catch (e) {} finally { fmdEnVuelo = false; }
   }
 
-  function fmdTexto(x) { return [x.documento, x.nombre, x.whatsapp, x.residencia, x.codigo, x.bd && x.bd.lider, x.bd && x.bd.ref].join(' ').toLowerCase(); }
+  function fmdTexto(x) { return [x.documento, x.nombre, x.whatsapp, x.residencia, x.codigo, x.bd && x.bd.lider, x.bd && x.bd.ref, x.conf && x.conf.por].join(' ').toLowerCase(); }
+  const FMD_FILTRO = { todos: () => true, base: x => !!x.bd, fuera: x => !x.bd, conf: x => !!x.conf, sinconf: x => !x.conf };
   function fmdFiltrados() {
     const q = (($('#fmd-q') || {}).value || '').trim().toLowerCase();
-    return (FMD.items || []).filter(x => (FMD.filtro === 'todos' || (FMD.filtro === 'base' ? !!x.bd : !x.bd)) && (!q || fmdTexto(x).includes(q)));
+    const f = FMD_FILTRO[FMD.filtro] || FMD_FILTRO.todos;
+    return (FMD.items || []).filter(x => f(x) && (!q || fmdTexto(x).includes(q)));
+  }
+  /* 13/11/2026 · confirmar/descartar: solo si el CORE lo dice (form.marcable). Con
+     un CORE viejo no llega la bandera y la vista queda como antes. */
+  function fmdMarcable() { return !!(FMD && FMD.form && FMD.form.marcable === true); }
+  /* Totales, KPIs y conteo de las pastillas (sin tocar la lista) */
+  function fmdResumen() {
+    if (!FMD || !FMD.items || !$('#fmd-kpis')) return;
+    const all = FMD.items, enBase = all.filter(x => x.bd).length, espera = all.filter(x => x.estado === 'ESPERA').length, asis = all.filter(x => x.asistio).length;
+    const marc = fmdMarcable(), conf = marc ? all.filter(x => x.conf).length : 0;
+    $('#fmd-tot').textContent = `${all.length.toLocaleString('es-CO')} inscrito(s)`;
+    $('#fmd-kpis').innerHTML = [['Inscritos', all.length], ['Confirmados', conf], ['En la base', enBase], ['No están', all.length - enBase], ['En espera', espera], ['Asistieron', asis]]
+      .filter(([k, v]) => v || k === 'Inscritos' || k === 'En la base' || k === 'No están' || (k === 'Confirmados' && marc)).map(([k, v]) => `<div><b>${v.toLocaleString('es-CO')}</b><span>${k}</span></div>`).join('');
+    const cuenta = { todos: all.length, base: enBase, fuera: all.length - enBase, conf: conf, sinconf: all.length - conf };
+    $$('#fmd-chips .bd-chip').forEach(ch => {
+      if (ch.dataset.f === 'conf' || ch.dataset.f === 'sinconf') ch.hidden = !marc;
+      ch.querySelector('i').textContent = ` ${cuenta[ch.dataset.f].toLocaleString('es-CO')}`;
+    });
+    $('#fmd-xls').hidden = !all.length;
   }
   function fmdPintar(suave) {
     const body = $('#fmd-body'); if (!body || !FMD || !FMD.items) return;
-    const all = FMD.items, enBase = all.filter(x => x.bd).length, espera = all.filter(x => x.estado === 'ESPERA').length, asis = all.filter(x => x.asistio).length;
-    $('#fmd-tot').textContent = `${all.length.toLocaleString('es-CO')} inscrito(s)`;
-    $('#fmd-kpis').innerHTML = [['Inscritos', all.length], ['En la base', enBase], ['No están', all.length - enBase], ['En espera', espera], ['Asistieron', asis]]
-      .filter(([k, v]) => v || k === 'Inscritos' || k === 'En la base' || k === 'No están').map(([k, v]) => `<div><b>${v.toLocaleString('es-CO')}</b><span>${k}</span></div>`).join('');
-    const cuenta = { todos: all.length, base: enBase, fuera: all.length - enBase };
-    $$('#fmd-chips .bd-chip').forEach(ch => { ch.querySelector('i').textContent = ` ${cuenta[ch.dataset.f].toLocaleString('es-CO')}`; });
-    $('#fmd-xls').hidden = !all.length;
+    const all = FMD.items;
+    fmdResumen();
     if (FMD.sel) { const fuera = new Set(all.filter(x => !x.bd).map(x => x.documento)); FMD.sel.forEach(d => { if (!fuera.has(d)) FMD.sel.delete(d); }); }
     fmdActs();
     const lista = fmdFiltrados();
@@ -849,7 +864,17 @@
   function fmdCard(x) {
     const sel = FMD.sel, puede = sel && !x.bd && !!x.documento, on = puede && sel.has(x.documento);
     const est = x.asistio ? '<span class="fmd-est fmd-asis">Asistió</span>' : x.estado === 'ESPERA' ? '<span class="fmd-est fmd-esp">En espera</span>' : '';
-    return `<article class="fmd-card ${x.bd ? 'fmd-enbd' : ''} ${on ? 'rf-on' : ''} ${sel && !puede ? 'fmd-nosel' : ''}" data-doc="${esc(x.documento)}" data-cod="${esc(x.codigo)}">
+    const marc = fmdMarcable() && !sel;
+    const pc = typeof permOk !== 'function' || permOk('fm.confirmar'), pd = typeof permOk !== 'function' || permOk('fm.descartar');
+    /* Llamar: solo celular (tel:). WhatsApp: celular y PC. */
+    const tel = x.whatsapp && esMovilPriv() ? `<button type="button" class="fmd-ic fmd-ic-tel" data-fa="tel" title="Llamar" aria-label="Llamar">${I.phone}</button>` : '';
+    const wa = x.whatsapp ? `<button type="button" class="fmd-ic fmd-ic-wa" data-wa="57${esc(x.whatsapp)}" title="WhatsApp" aria-label="WhatsApp">${I.wa}</button>` : '';
+    const acts = marc ? `<div class="fmd-acc">${tel}${wa}
+        ${pc ? (x.conf ? `<button type="button" class="fmd-ic fmd-ic-quitar" data-fa="quitar" title="Quitar confirmación" aria-label="Quitar confirmación">${I.x}</button>`
+                       : `<button type="button" class="fmd-btn-conf" data-fa="confirmar">${I.check} Confirmar</button>`) : ''}
+        ${pd ? `<button type="button" class="fmd-btn-desc" data-fa="descartar" title="Descartar" aria-label="Descartar">${I.trash}<span class="fmd-lbl"> Descartar</span></button>` : ''}</div>` : '';
+    const confHtml = marc && x.conf ? `<span class="fmd-conf">${I.check} Confirmado por ${esc(x.conf.por || '—')} · ${esc(fmFechaHora(x.conf.fecha))}</span>` : '';
+    return `<article class="fmd-card ${x.bd ? 'fmd-enbd' : ''} ${marc && x.conf ? 'fmd-confirmado' : ''} ${on ? 'rf-on' : ''} ${sel && !puede ? 'fmd-nosel' : ''}" data-doc="${esc(x.documento)}" data-cod="${esc(x.codigo)}">
       ${puede ? `<input type="checkbox" class="rf-ck" ${on ? 'checked' : ''} aria-label="Seleccionar" />` : ''}
       ${avatarHtml(x.nombre, '')}
       <div class="rf-c-main">
@@ -857,10 +882,12 @@
         <span class="rf-c-sub">${x.documento ? `CC ${esc(x.documento)}` : 'Sin documento'} · ${esc(x.whatsapp || '—')}</span>
         <span class="rf-c-res">${esc(x.residencia || '')}${x.fecha ? ` · ${esc(fmFechaCorta(x.fecha))}` : ''}</span>
         ${x.bd ? `<span class="fmd-lider">${I.users} ${esc(x.bd.lider || ('Líder #' + x.bd.ref))}${x.bd.ref ? ` · #${esc(x.bd.ref)}` : ''}</span>` : '<span class="fmd-fuera">No está en la base</span>'}
+        ${confHtml}
+        ${acts}
         <div class="fmd-resp" hidden></div>
       </div>
       <div class="rf-c-side">${est}<span class="fmd-cod">${esc(x.codigo)}</span>
-        ${!sel && x.whatsapp ? `<button type="button" class="rf-wa" data-wa="57${esc(x.whatsapp)}" title="WhatsApp">${I.wa}</button>` : ''}</div>
+        ${!sel && !marc && x.whatsapp ? `<button type="button" class="rf-wa" data-wa="57${esc(x.whatsapp)}" title="WhatsApp">${I.wa}</button>` : ''}</div>
     </article>`;
   }
   /* Respuestas del formulario, en el orden de los campos congelados */
@@ -883,6 +910,13 @@
     if (ev.target.closest('a')) return;
     const card = ev.target.closest('.fmd-card[data-doc]'); if (!card) return;
     const x = (FMD.items || []).find(i => i.codigo === card.dataset.cod); if (!x) return;
+    const fa = ev.target.closest('[data-fa]');
+    if (fa) {
+      ev.stopPropagation();
+      if (fa.dataset.fa === 'tel') { location.href = 'tel:+57' + String(x.whatsapp || '').replace(/\D/g, '').replace(/^57(?=3\d{9}$)/, ''); return; }
+      if (fa.dataset.fa === 'descartar') return fmdDescartar(x, fa);
+      return fmdMarcar(x, fa.dataset.fa, fa);
+    }
     if (FMD.sel) {
       if (x.bd) return;
       const d = x.documento;
@@ -895,6 +929,79 @@
     if (box.hidden) box.innerHTML = fmdRespHtml(x);
     box.hidden = !box.hidden; card.classList.toggle('fmd-abierta', !box.hidden);
   }
+
+  /* ----------------------------------- confirmar / descartar (13/11/2026)
+     Una escritura por toque (botón ocupado + rid de api()). Al volver se parcha
+     la fila en memoria: la tarjeta se repinta sola, sin recargar la lista, y se
+     olvida el recuerdo local de Detalles de ese formulario. */
+  function fmFechaHora(s) {
+    const m = /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d)/.exec(String(s || ''));
+    if (!m) return String(s || '');
+    const h = +m[4], ap = h < 12 ? 'a. m.' : 'p. m.';
+    return `${m[3]}/${m[2]}/${m[1]} ${((h + 11) % 12) + 1}:${m[5]} ${ap}`;
+  }
+  function fmdCardEl(cod) { return $(`#fmd-body .fmd-card[data-cod="${CSS.escape(cod)}"]`); }
+  function fmdRepintarCard(x) {
+    const el = fmdCardEl(x.codigo); if (!el) return;
+    const abierta = el.classList.contains('fmd-abierta');
+    const tmp = h(fmdCard(x)); el.replaceWith(tmp);
+    if (abierta) { const box = tmp.querySelector('.fmd-resp'); box.innerHTML = fmdRespHtml(x); box.hidden = false; tmp.classList.add('fmd-abierta'); }
+  }
+  /* Quita la fila de la memoria, de la pantalla y ajusta conteos y cupo */
+  function fmdQuitarFila(yo, cod, n) {
+    yo.items = (yo.items || []).filter(i => i.codigo !== cod);
+    if (FMD !== yo) return;
+    const el = fmdCardEl(cod);
+    if (el) { el.remove(); FMD.mostrados = Math.max(0, FMD.mostrados - 1); }
+    if (typeof n === 'number') {
+      FMD.n = n;   // el EN VIVO no vuelve a pedir lo que ya se sabe
+      if (FMD.id in FM_N) FM_N[FMD.id] = n;
+      const f = fmFind(FMD.id); if (f) { f.n = n; rapSync('priv.formularios', FM_ALL); }
+      fmPintarConteos();
+    }
+    fmdResumen();
+    if (!fmdFiltrados().length) fmdPintar(true);
+  }
+  async function fmdMarcar(x, accion, btn) {
+    const yo = FMD;
+    const t0 = performance.now();
+    const r = await fmEscribir(btn, 'priv.formMarcar', { id: yo.id, codigo: x.codigo, accion });
+    fmdMedir('marcar.' + accion, t0);
+    if (!r) return;
+    RAP.olvidar(fmdClave(yo.id));
+    if (r.gone) { fmdQuitarFila(yo, x.codigo); return toast('Ese registro ya no existe: lo descartaron.', 'err'); }
+    x.conf = r.conf || null;
+    if (FMD !== yo) return;
+    fmdRepintarCard(x); fmdResumen();
+    if (FMD.filtro === 'conf' || FMD.filtro === 'sinconf') { const el = fmdCardEl(x.codigo); if (el && !FMD_FILTRO[FMD.filtro](x)) { el.remove(); FMD.mostrados = Math.max(0, FMD.mostrados - 1); } }
+    toast(accion === 'confirmar' ? 'Confirmado' : 'Confirmación quitada', 'ok');
+  }
+  function fmdDescartar(x, btn) {
+    const yo = FMD;
+    /* Diálogo propio encima de todo: no cierra Detalles ni depende del scroll */
+    const ov = h(`<div class="fmd-ov fmd-ov-fijo"><div class="fmd-dlg" role="dialog" aria-modal="true">
+      <h2 class="h2">¿Descartar este registro?</h2>
+      <div class="confirm-list" style="margin:6px 0 4px;">${crow('Nombre', x.nombre)}${crow('Documento', x.documento)}${crow('WhatsApp', x.whatsapp)}${crow('Código', x.codigo)}</div>
+      <p class="muted small" style="margin:8px 0 0;">Se <b>elimina</b> la inscripción${yo.it && yo.it.cupo ? ' y se libera su cupo' : ''}. No se puede deshacer.</p>
+      <button class="btn btn-block fmd-btn-desc-ok" id="fmd-dok" style="margin-top:14px;">${I.trash} Sí, descartar</button>
+      <button class="btn btn-quiet btn-block" id="fmd-dno" style="margin-top:8px;">Cancelar</button></div></div>`);
+    document.body.appendChild(ov);
+    const cerrar = () => ov.remove();
+    ov.querySelector('#fmd-dno').onclick = cerrar;
+    ov.onclick = e => { if (e.target === ov) cerrar(); };
+    ov.querySelector('#fmd-dok').onclick = async (e) => {
+      const ok = e.currentTarget;
+      const t0 = performance.now();
+      const r = await fmEscribir(ok, 'priv.formMarcar', { id: yo.id, codigo: x.codigo, accion: 'descartar' });
+      fmdMedir('marcar.descartar', t0);
+      if (!r) return;
+      cerrar();
+      RAP.olvidar(fmdClave(yo.id));
+      fmdQuitarFila(yo, x.codigo, r.n);
+      toast(yo.it && yo.it.cupo ? 'Registro descartado · cupo liberado' : 'Registro descartado', 'ok');
+    };
+  }
+  function fmdMedir(k, t0) { try { if (window.RED && typeof RED.pantalla === 'function') RED.pantalla('fmd.' + k, performance.now() - t0); } catch (e) {} }
 
   /* --------------------------------------------- agregar a la base */
   function fmdActs() {
