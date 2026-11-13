@@ -58,6 +58,7 @@
     /* ---- Líderes ---- */
     ['#ld-add', 'lid.agregar'],
     ['#ld-memoria', 'lid.mem.ver'],
+    ['#ld-tablero', 'lid.tablero'],        /* 13/11/2026 · tablero de líderes */
     ['#ld-exp', 'lid.exportar'],
     ['.ld-bit-add', 'lid.bitacora'],        /* 03/11/2026 · bitácora del mes */
     ['.ld-bit-edit', 'lid.bitacora'],
@@ -168,7 +169,7 @@
   /* Ruta del front → pastilla que la abre. '' = cerrada para el invitado. */
   var PERM_RUTAS = {
     bd: 'bd.ver', dashboard: 'dash.ver', simulador: 'sim.ver', votacion: 'voto.ver',
-    lideres: 'lid.ver', eventos: 'ev.ver', agenda: 'ag.ver', compromisos: 'cm.ver',
+    lideres: 'lid.ver', lidtablero: 'lid.tablero', eventos: 'ev.ver', agenda: 'ag.ver', compromisos: 'cm.ver',
     solicitudes: 'sl.ver', formularios: 'fm.ver', notificaciones: 'nt.ver', analisis: 'an.ver',
     config: 'cf.ver', mibot: ''   /* 07/11/2026: Configuración → solo Casa social / Inicio para el invitado */
   };

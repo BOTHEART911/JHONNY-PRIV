@@ -41,7 +41,7 @@
   /* ============================================================ 1 · COPIA */
   var COPIA = {};
   ('priv.baseDatos priv.bdCard priv.persona priv.trazabilidad priv.dashboard priv.simulador ' +
-   'priv.lideres priv.liderVer priv.liderReferidos priv.liderMeses priv.liderAhijados priv.balances priv.balanceVer ' +
+   'priv.lideres priv.lideresTablero priv.liderVer priv.liderReferidos priv.liderMeses priv.liderAhijados priv.balances priv.balanceVer ' +
    'priv.agenda priv.agendaMeta priv.reunionVer priv.reunionMeta ' +
    'priv.eventos priv.eventoVer priv.eventoMeta priv.eventoAsistentes ' +
    'priv.compromisos priv.compromisoVer priv.solicitudes priv.solicitudVer ' +

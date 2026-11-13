@@ -39,7 +39,7 @@
     'priv.validarDoc': 'validar el documento', 'priv.trazabilidad': 'cargar los detalles', 'priv.trazabilidadLote': 'cargar los detalles',
     'priv.lideres': 'cargar los líderes', 'priv.liderVer': 'abrir el líder', 'priv.liderReferidos': 'cargar los referidos del líder',
     'priv.liderNuevoMeta': 'preparar el formulario del líder', 'priv.liderBuscarDoc': 'buscar el documento', 'priv.liderAhijados': 'cargar los líderes a cargo',
-    'priv.liderMeses': 'cargar el trabajo por mes', 'priv.liderBitacoraInforme': 'generar el informe de bitácoras',
+    'priv.liderMeses': 'cargar el trabajo por mes', 'priv.liderBitacoraInforme': 'generar el informe de bitácoras', 'priv.lideresTablero': 'cargar el tablero de líderes',
     'priv.liderBitacoraGuardar': 'guardar la bitácora', 'priv.liderBitacoraEditar': 'guardar los cambios de la bitácora',
     'priv.liderDelegar': 'delegar el líder', 'priv.liderClasificacion': 'cambiar la clasificación del líder', 'priv.liderAccion': 'aplicar la acción al líder',
     'priv.liderActivarInfo': 'cargar los datos para activar el líder',

@@ -397,6 +397,7 @@ const I = {
   cal2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  trend:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
   bot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M8 4h8"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M2 13v3M22 13v3"/></svg>',
@@ -490,6 +491,10 @@ function render() {
   switch (route) {
     case 'bd': return viewBaseDatos(user);
     case 'lideres': return viewLideres(user);
+    case 'lidtablero':   /* 13/11/2026 · js/lid-tablero.js (si aún no cargó, se espera al DOM) */
+      if (window.viewLidTablero) return viewLidTablero(user);
+      if (document.readyState === 'loading') return document.addEventListener('DOMContentLoaded', render, { once: true });
+      return go('lideres');
     case 'dashboard': return viewDashboard(user);
     case 'simulador': return viewSimulador(user);
     case 'votacion': return viewVotacion(user);
@@ -2838,6 +2843,7 @@ async function viewLideres(user) {
     <div class="pad">
       <div class="bd-toolbar">
         <div class="bd-search"><input class="input" id="ld-q" placeholder="Buscar por código, nombre, documento, residencia o padrino…" autocomplete="off" /></div>
+        <button class="btn btn-ghost" id="ld-tablero" title="Crecimiento y tipificación de cada líder, mes a mes">${I.trend} Tablero</button>
         <button class="btn btn-ghost" id="ld-memoria">${I.chart} Memoria mensual</button>
         <button class="btn btn-ghost" id="ld-exp">${I.download} Exportar</button>
         <button class="btn btn-ghost" id="ld-bitinf" title="Informe de bitácoras por meses (PDF o Excel)">${I.book} Bitácoras</button>
@@ -2857,6 +2863,7 @@ async function viewLideres(user) {
   app.hidden = false; hideSplash();
   $('#backbtn').onclick = () => go('home');
   $('#ld-add').onclick = () => ldAgregar();
+  $('#ld-tablero').onclick = () => go('lidtablero');   /* 13/11/2026 · js/lid-tablero.js */
   $('#ld-memoria').onclick = () => ldMemoria();
   $('#ld-exp').onclick = () => ldExportar();
   $('#ld-bitinf').onclick = () => ldBitInforme();
