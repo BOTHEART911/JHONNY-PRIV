@@ -9893,7 +9893,10 @@ function cfTplPrev(i) {
     '{mensaje}': 'Trae el listado de asistentes impreso, por favor.',
     /* 31/07 — seguridad de la zona de líderes (app pública) */
     '{codigo_activacion}': '480915', '{vigencia}': '3', '{bloqueo}': '5', '{intentos}': '3',
-    '{pn_nombre}': 'MARÍA', '{correo}': 'ma***@gmail.com', '{equipo}': 'Equipo ' + MV.candidato };
+    '{pn_nombre}': 'MARÍA', '{correo}': 'ma***@gmail.com', '{equipo}': 'Equipo ' + MV.candidato,
+    /* 16/11/2026 · Formularios → Detalles → WhatsApp (PLANTILLA_FORM_WHATSAPP) */
+    '{nombre_corto}': 'María', '{nombre_candidato}': MV.candidato, '{nombre_formulario}': 'Curso de velas y jabones 2026',
+    '{url_imagen}': 'https://lh3.googleusercontent.com/d/…', '{Usuario_app}': ((typeof getActive === 'function' && getActive()) || {}).nombre || 'Oscar Polania' };
   let out = txt;
   p.vars.forEach(v => { out = out.split(v).join(ejemplo[v] || v); });
   $('#cf-tpl-prev-' + i).innerHTML = `<div class="cfg-prev-b">${esc(out)}</div>`;

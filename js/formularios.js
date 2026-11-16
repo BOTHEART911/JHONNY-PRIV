@@ -814,7 +814,7 @@
         if (FMD !== yo || !$('#fmd-body')) return;
         if (!r || r.ok === false) { if (!yo.items) $('#fmd-body').innerHTML = `<p class="muted center">${esc((r && r.msg) || 'No se pudo cargar.')}</p>`; return; }
         const primera = !yo.items;
-        yo.items = r.items || []; yo.form = r.form || {}; fmdPintar();
+        yo.items = r.items || []; yo.form = r.form || {}; yo.wa = r.wa || yo.wa || null; fmdPintar();
         if (primera) try { RED.pantalla && RED.pantalla('fm.detalles' + (deCache ? '.cache' : ''), performance.now() - t0); } catch (e) {}
       }, fmdClave(it.id), FMD_LEER);   /* la hoja ya muestra esqueleto: sin cortina global ni escudo; 13/11: sin la cola de fondo (es lo que el usuario pidió) */
     } catch (e) { if (FMD === yo && !yo.items && $('#fmd-body')) $('#fmd-body').innerHTML = /no reconocida/i.test(String(e && e.message)) ? '<p class="muted center">Falta desplegar la versión nueva del CORE.</p>' : fallaHtml(e); }
@@ -832,7 +832,7 @@
       const r = await api('priv.formRegistros', Object.assign(fmAuth(), { id: yo.id }, RAP.params()), 'GET', null, SILENCIO);
       if (!r || r.ok === false || FMD !== yo) return;
       RAP.guardar(fmdClave(yo.id), r, r.__rapCrudo || r);
-      yo.items = r.items || []; yo.form = r.form || yo.form; fmdPintar(true);
+      yo.items = r.items || []; yo.form = r.form || yo.form; yo.wa = r.wa || yo.wa || null; fmdPintar(true);
     } catch (e) {} finally { fmdEnVuelo = false; }
   }
 
@@ -931,9 +931,42 @@
     });
     return filas.length ? filas.join('') : '<div><span>Sin respuestas adicionales</span></div>';
   }
+  /* 16/11/2026 · Mensaje de WhatsApp para confirmar al inscrito. La plantilla
+     (CONFIG PLANTILLA_FORM_WHATSAPP, Configuración → Plantillas) y el candidato
+     llegan DENTRO de priv.formRegistros (r.wa): tocar el botón no viaja al
+     servidor. Con un CORE que no manda r.wa, el chat se abre vacío, como antes.
+     {nombre_corto} = primer nombre en tipo título. {url_imagen} vacío → la
+     línea queda sin el espacio sobrante. Saltos de línea, * y > van tal cual:
+     ldWaOpen los codifica con encodeURIComponent (celular y PC). */
+  function fmdTitulo(t) { const s = String(t || '').toLocaleLowerCase('es-CO'); return s ? s.charAt(0).toLocaleUpperCase('es-CO') + s.slice(1) : ''; }
+  /* Pura (sin estado): plantilla + datos → texto. La usa el botón y el banco. */
+  function fmdWaArmar(w, x, form, it, yo, M) {
+    if (!w || !w.plantilla || !x) return '';
+    const v = {
+      '{nombre_corto}': fmdTitulo(primerNombre(x.nombre)),
+      '{nombre_candidato}': String(w.candidato || (window.MV && MV.candidato) || (M && M.CANDIDATO) || '').trim(),
+      '{nombre_formulario}': String((form && form.nombre) || (it && it.nombre) || '').trim(),
+      '{url_imagen}': String((it && it.imagen) || '').trim(),
+      '{Usuario_app}': String((yo && yo.nombre) || '').trim()
+    };
+    let out = String(w.plantilla);
+    Object.keys(v).forEach(k => { out = out.split(k).join(v[k]); });
+    return out.replace(/[ \t]+$/gm, '');
+  }
+  function fmdWaTexto(x) {
+    if (!FMD) return '';
+    return fmdWaArmar(FMD.wa, x, FMD.form, FMD.it, (typeof getActive === 'function' && getActive()) || {}, window.MARCA || {});
+  }
+  window.fmdWaArmar = fmdWaArmar;   /* banco de pruebas */
   function fmdClic(ev) {
     const wa = ev.target.closest('[data-wa]');
-    if (wa) { ev.stopPropagation(); return typeof ldWaOpen === 'function' ? ldWaOpen(wa.dataset.wa, '') : window.open('https://wa.me/' + wa.dataset.wa, '_blank'); }
+    if (wa) {
+      ev.stopPropagation();
+      const card = wa.closest('.fmd-card[data-cod]');
+      const x = card ? (FMD.items || []).find(i => i.codigo === card.dataset.cod) : null;
+      const txt = fmdWaTexto(x);
+      return typeof ldWaOpen === 'function' ? ldWaOpen(wa.dataset.wa, txt) : window.open('https://wa.me/' + wa.dataset.wa + (txt ? '?text=' + encodeURIComponent(txt) : ''), '_blank');
+    }
     if (ev.target.closest('a')) return;
     const card = ev.target.closest('.fmd-card[data-doc]'); if (!card) return;
     const x = (FMD.items || []).find(i => i.codigo === card.dataset.cod); if (!x) return;
