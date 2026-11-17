@@ -51,6 +51,8 @@
    'priv.liderBitacoraInforme ' +
    /* 13/11/2026 · tablero de líderes (solo lectura) */
    'priv.lideresTablero ' +
+   /* 17/11/2026 · vista previa de Eliminar líder (solo lectura) */
+   'priv.liderEliminarPrevia ' +
    /* 07/11/2026 · Formularios (solo lectura) */
    'priv.formularios priv.formRegistros priv.trazabilidad ' +
    /* 09/11/2026 · precarga de Detalles (solo lectura) */

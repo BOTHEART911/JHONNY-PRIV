@@ -2738,6 +2738,7 @@ function ldCardHtml(c) {
       ${esMovilPriv() ? `<button class="bd-btn ld-ic ld-btn-tel" data-a="tel" ${tel ? '' : 'disabled'} title="Llamar">${I.phone}</button>` : ''}
       <button class="bd-btn ld-ic" data-a="editar" title="Editar">${I.pencil}</button>
       <button class="bd-btn ld-ic ld-btn-acc" data-a="acciones" title="Acciones">${I.dots}</button>
+      ${String(c.codigo) !== '1' ? `<button class="bd-btn ld-ic bd-btn-danger" data-a="eliminar" data-perm="bd.eliminar" title="Eliminar líder (traspasa sus referidos)">${I.trash}</button>` : ''}
     </div>
     ${ldClaseChip(c)}
   </article>`;
@@ -3055,6 +3056,7 @@ function ldAccion(a, cod) {
   if (a === 'editar') return ldEditar(cod);
   if (a === 'acciones') return ldAcciones(cod);
   if (a === 'activar') return ldActivar(cod);   /* 01/09 */
+  if (a === 'eliminar') return window.ldEliminar ? ldEliminar(cod) : toast('Recarga la app para eliminar líderes', 'err');   /* 17/11/2026 · js/lid-eliminar.js */
 }
 
 /* ---- VER · FICHA DEL LÍDER (13/10/2026 · Fase 2) ----
@@ -3141,6 +3143,7 @@ function ldVerHtml(c, completo) {
             <button class="btn btn-quiet btn-block" id="ld-ahijados">Ahijados y delegación</button>
             <button class="btn btn-primary btn-block" id="v-edit">Editar</button>
             <button class="btn btn-quiet btn-block" id="v-acc">Acciones (mensajes)</button>
+            ${String(c.codigo) !== '1' ? `<button class="btn btn-quiet btn-block bd-btn-danger" id="v-elim" data-perm="bd.eliminar">${I.trash} Eliminar líder</button>` : ''}
           </div>
         </div>
       </div>
@@ -3162,6 +3165,7 @@ function ldVerPintar(c, completo) {
   if ($('#v-tel')) $('#v-tel').onclick = () => { location.href = 'tel:+' + String(c.contacto || '').replace(/\D/g, ''); };
   $('#v-edit').onclick = () => { closeLayer(); ldEditar(cod); };
   $('#v-acc').onclick = () => { closeLayer(); ldAcciones(cod); };
+  if ($('#v-elim')) $('#v-elim').onclick = () => { closeLayer(); ldAccion('eliminar', cod); };   /* 17/11/2026 */
 }
 
 async function ldVer(cod) {
