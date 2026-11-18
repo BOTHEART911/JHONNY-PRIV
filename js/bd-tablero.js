@@ -13,6 +13,12 @@
  *  · Tendencia: registros por mes (FECHA_REGISTRO) de lo que se ve en la
  *    lista (todos los filtros). Franja compacta + hoja ampliada.
  *
+ *  · 18/11/2026 · La hoja ampliada trae su propio selector de líder (Todos,
+ *    Sin líder o uno, con buscador por nombre o número) y la pestaña
+ *    «Líderes», que los clasifica por crecimiento. Sale de la misma lista
+ *    (ULT.base = todos los filtros MENOS el líder): cero viajes. Elegir un
+ *    líder en la hoja NO cambia la lista de atrás.
+ *
  * Se llama desde bdApplyFilter, bdBuildIntChips y el parche de fila
  * (bdUpsertCard): agregar, editar, inactivar, eliminar y EN VIVO quedan al
  * día sin recargar. Tiempo de pantalla: RED.pantalla('bd.tablero').
@@ -23,6 +29,8 @@
   var MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   var MES_L = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   var ULT = null;   // último cálculo (la hoja ampliada lo reutiliza)
+  /* estado de la hoja ampliada: líder propio, pestaña y orden de la clasificación */
+  var M = { lid: '', tab: 'graf', ord: 'mes', ceros: false };
 
   function n(x) { return Number(x || 0).toLocaleString('es-CO'); }
   function e(s) { return (typeof esc === 'function') ? esc(s) : String(s == null ? '' : s); }
@@ -44,19 +52,19 @@
     var chips = {}, ints = {}, visibles = [];
     var etiquetas = [];
     document.querySelectorAll('#bd-chips .bd-chip').forEach(function (b) { etiquetas.push(b.dataset.f); chips[b.dataset.f] = 0; });
+    var base = [];                                    // 18/11 · todo menos el líder (hoja ampliada)
     for (var i = 0; i < BD_ALL.length; i++) {
       var c = BD_ALL[i];
-      var resto = bdPasaResto(c, q, true);            // búsqueda + líder (sin intención)
-      if (!resto) continue;
+      if (!bdPasaResto(c, q, true, false, true)) continue;   // búsqueda + actividad (sin intención ni líder)
+      var okLid = bdPasaLid(c, BD_LID);
       var conInt = !BD_INT.size || BD_INT.has(String(c.intencion || '').trim());
-      if (conInt) for (var j = 0; j < etiquetas.length; j++) if (bdPasaChip(c, etiquetas[j])) chips[etiquetas[j]]++;
+      if (okLid && conInt) for (var j = 0; j < etiquetas.length; j++) if (bdPasaChip(c, etiquetas[j])) chips[etiquetas[j]]++;
       if (bdPasaChip(c, f)) {
-        var v = String(c.intencion || '').trim();
-        if (v) ints[v] = (ints[v] || 0) + 1;
-        if (conInt) visibles.push(c);
+        if (okLid) { var v = String(c.intencion || '').trim(); if (v) ints[v] = (ints[v] || 0) + 1; }
+        if (conInt) { base.push(c); if (okLid) visibles.push(c); }
       }
     }
-    return { chips: chips, ints: ints, tend: tendencia(visibles) };
+    return { chips: chips, ints: ints, tend: tendencia(visibles), base: base };
   }
 
   function tendencia(lista) {
@@ -146,16 +154,16 @@
   }
 
   /* ---------- hoja ampliada ---------- */
+  /* filtros de la lista que también aplican en la hoja (el líder va aparte) */
   function filtrosTxt() {
     var p = [], f = bdActiveFilter();
     if (f && f !== 'Todos') p.push(f);
     if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
     if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
-    if (BD_LID === 'SIN') p.push('Sin líder');
-    else if (BD_LID) { var l = (BD_LIDERES || []).find(function (x) { return String(x.codigo) === String(BD_LID); }); p.push('Líder: ' + (l ? l.nombre : '#' + BD_LID)); }
     var q = bdQ(); if (q) p.push('Búsqueda: "' + q + '"');
-    return p.length ? p.join(' · ') : 'Todos los registros activos';
+    return p.join(' · ');
   }
+  function lidTxt(lid) { return lid === 'SIN' ? 'Sin líder asignado' : lid ? bdLidTexto(lid) : 'Todos los líderes'; }
 
   function grafica(meses) {
     if (!meses.length) return '';
@@ -188,17 +196,146 @@
     }).join('');
     var nota = t.actual && t.actual.enCurso && t.anterior
       ? '<p class="muted small bdt-nota">El mes en curso va en +' + n(t.actual.nuevos) + '; al día ' + t.diaHoy + ' de ' + e(kLargo(t.anterior.k).toLowerCase()) + ' iban +' + n(t.anteriorAlCorte) + '.</p>' : '';
-    return '<p class="muted small bdt-filtros">' + e(filtrosTxt()) + ' · ' + n(t.total) + ' registro(s)</p>' +
+    var ft = filtrosTxt();
+    return '<p class="muted small bdt-filtros"><b>' + e(lidTxt(M.lid)) + '</b>' + (ft ? ' · ' + e(ft) : (M.lid ? '' : ' · toda la base activa')) + ' · ' + n(t.total) + ' registro(s)</p>' +
+      (!t.meses.length ? '<p class="muted center bdt-vacio">Sin registros con fecha para esta selección.</p>' : '') +
       '<div class="bdt-ley"><span><i class="bdt-sw-bar"></i>Nuevos del mes</span><span><i class="bdt-sw-lin"></i>Acumulado</span></div>' +
       grafica(t.meses) + nota +
       '<div class="bdt-tabla"><div class="bdt-fila bdt-cab"><span>Mes</span><span class="bdt-num">Nuevos</span><span class="bdt-num">Acumulado</span><span>Vs. mes anterior</span></div>' + filas + '</div>' +
       (t.sinFecha ? '<p class="muted small">Sin fecha de registro: ' + n(t.sinFecha) + ' (no entran en la tendencia).</p>' : '');
   }
 
+  /* ================= 18/11/2026 · por líder + clasificación ================= */
+  function tendLid() { return M.lid ? tendencia(ULT.base.filter(function (c) { return bdPasaLid(c, M.lid); })) : tendencia(ULT.base); }
+
+  /* Clasificación: una pasada por ULT.base agrupando por REFERENCIA. */
+  function ranking() {
+    var hoy = new Date(), kHoy = kDe(hoy), dia = hoy.getDate();
+    var k1 = kAnt(kHoy), k2 = kAnt(k1), ks = [kHoy], i;
+    for (i = 0; i < 5; i++) ks.unshift(kAnt(ks[0]));   // 6 meses para la mini gráfica
+    var g = {};
+    function grupo(cod) {
+      if (!g[cod]) g[cod] = { cod: cod, total: 0, mes: 0, ant: 0, antCorte: 0, tri: 0, seis: ks.map(function () { return 0; }) };
+      return g[cod];
+    }
+    (BD_LIDERES || []).forEach(function (l) { grupo(String(l.codigo)); });
+    ULT.base.forEach(function (c) {
+      var x = grupo(String(c.referencia || '') || 'SIN'); x.total++;
+      var m = mesDe(c); if (!m) return;
+      if (m.k === kHoy) { x.mes++; x.tri++; }
+      else if (m.k === k1) { x.ant++; x.tri++; if (m.d <= dia) x.antCorte++; }
+      else if (m.k === k2) x.tri++;
+      var j = ks.indexOf(m.k); if (j >= 0) x.seis[j]++;
+    });
+    var lista = Object.keys(g).map(function (k) { var x = g[k]; x.dif = x.mes - x.antCorte; return x; });
+    var clave = { mes: 'mes', tri: 'tri', dif: 'dif', total: 'total' }[M.ord] || 'mes';
+    lista.sort(function (a, b) { return (b[clave] - a[clave]) || (b.mes - a.mes) || (b.total - a.total) || (String(a.cod) < String(b.cod) ? -1 : 1); });
+    return { lista: lista, ks: ks, kHoy: kHoy, k1: k1, dia: dia };
+  }
+  function kAnt(k) { var y = +k.slice(0, 4), m = +k.slice(5, 7) - 1; if (m < 1) { m = 12; y--; } return y + '-' + String(m).padStart(2, '0'); }
+
+  function seisMini(v) {
+    var max = Math.max.apply(null, v) || 1;
+    return '<svg class="bdr-mini" viewBox="0 0 60 20" preserveAspectRatio="none" aria-hidden="true">' + v.map(function (x, i) {
+      var hh = Math.max(x ? 2 : 1, Math.round(x * 19 / max));
+      return '<rect x="' + (i * 10) + '" y="' + (20 - hh) + '" width="7" height="' + hh + '" rx="1"' + (i === 5 ? ' class="cur"' : '') + '/>';
+    }).join('') + '</svg>';
+  }
+
+  function cuerpoRank() {
+    var t0 = performance.now();
+    var R = ranking(), clave = { mes: 'mes', tri: 'tri', dif: 'dif', total: 'total' }[M.ord] || 'mes';
+    var conDato = R.lista.filter(function (x) { return x.total > 0; });
+    var ceros = R.lista.length - conDato.length;
+    var lista = M.ceros ? R.lista : conDato;
+    var max = Math.max.apply(null, lista.map(function (x) { return Math.abs(x[clave]); }).concat([1]));
+    var lideres = conDato.filter(function (x) { return x.cod !== 'SIN'; });
+    var crecen = lideres.filter(function (x) { return x.mes > 0; }).length;
+    var top = lideres.slice().sort(function (a, b) { return b.mes - a.mes || b.total - a.total; })[0];
+    var ft = filtrosTxt();
+    var ords = [['mes', 'Este mes'], ['dif', 'Vs. mes anterior'], ['tri', 'Últimos 3 meses'], ['total', 'Total']];
+    var pos = 0;
+    var filas = lista.map(function (x) {
+      var sin = x.cod === 'SIN';
+      if (!sin) pos++;
+      var v = variacion(x.mes, x.antCorte);
+      var w = Math.round(Math.abs(x[clave]) * 100 / max);
+      return '<button type="button" class="bdr-fila' + (sin ? ' bdr-sin' : '') + (String(M.lid) === String(x.cod) ? ' sel' : '') + '" data-lid="' + e(x.cod) + '" title="Ver su crecimiento por mes">' +
+        '<span class="bdr-pos">' + (sin ? '—' : pos) + '</span>' +
+        '<span class="bdr-nom"><b>' + e(sin ? 'Sin líder asignado' : lidTxt(x.cod)) + '</b>' +
+          '<span class="bdr-barra"><i class="' + (clave === 'dif' && x.dif < 0 ? 'neg' : '') + '" style="width:' + w + '%"></i></span></span>' +
+        seisMini(x.seis) +
+        '<span class="bdr-n"><b>+' + n(x.mes) + '</b><span class="bdt-var ' + v.cls + '">' + e(v.txt) + '</span></span>' +
+        '<span class="bdr-n bdr-o' + (clave !== 'total' ? ' bdr-k' : '') + '"><b>' + n(x.tri) + '</b><span>3 meses</span></span>' +
+        '<span class="bdr-n bdr-o' + (clave === 'total' ? ' bdr-k' : '') + '"><b>' + n(x.total) + '</b><span>total</span></span>' +
+      '</button>';
+    }).join('');
+    var html =
+      '<p class="muted small bdt-filtros">' + (ft ? e(ft) + ' · ' : '') + n(lideres.length) + ' líder(es) con registros · <b>' + n(crecen) + '</b> sumaron este mes' +
+        (top && top.mes ? ' · más creció: <b>' + e(lidTxt(top.cod)) + '</b> (+' + n(top.mes) + ')' : '') + '</p>' +
+      '<div class="bdr-ord"><span class="bd-chips-lbl">Ordenar:</span>' + ords.map(function (o) {
+        return '<button type="button" class="bd-chip' + (M.ord === o[0] ? ' active' : '') + '" data-ord="' + o[0] + '">' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<p class="muted small bdr-nota">Este mes = ' + e(kLargo(R.kHoy).toLowerCase()) + ' en curso; la variación lo compara con ' + e(kLargo(R.k1).toLowerCase()) + ' hasta el día ' + R.dia + '. Toca un líder para ver su gráfica.</p>' +
+      '<div class="bdr-lista">' + (filas || '<p class="muted center">Sin registros para esta selección.</p>') + '</div>' +
+      (ceros ? '<button type="button" class="btn btn-ghost bdr-ceros" data-ceros>' + (M.ceros ? 'Ocultar' : 'Mostrar') + ' líderes sin registros (' + n(ceros) + ')</button>' : '');
+    try { window.RED && RED.pantalla && RED.pantalla('bd.tendRank', performance.now() - t0); } catch (x) {}
+    return html;
+  }
+
+  function pintarHoja(alInicio) {
+    var hoja = document.getElementById('bdt-hoja'); if (!hoja || !ULT) return;
+    var t0 = performance.now();
+    var sel = document.getElementById('bdt-lidbox'); if (sel) sel.hidden = M.tab !== 'graf';
+    document.querySelectorAll('.bdt-tabs [data-tab]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === M.tab); b.setAttribute('aria-selected', b.dataset.tab === M.tab); });
+    if (M.tab === 'rank') {
+      var lst = hoja.querySelector('.bdr-lista'), top = lst ? lst.scrollTop : 0;
+      hoja.innerHTML = cuerpoRank();
+      if (!alInicio) { lst = hoja.querySelector('.bdr-lista'); if (lst) lst.scrollTop = top; }
+    } else {
+      var g0 = hoja.querySelector('.bdt-graf'), sl = g0 ? g0.scrollLeft : null;
+      hoja.innerHTML = cuerpoHoja(tendLid());
+      var g = hoja.querySelector('.bdt-graf');
+      if (g) g.scrollLeft = (alInicio || sl == null) ? g.scrollWidth : sl;   // los meses recientes a la vista
+      try { window.RED && RED.pantalla && RED.pantalla('bd.tendHoja', performance.now() - t0); } catch (x) {}
+    }
+  }
+
+  function ponerLid(lid) {
+    M.lid = lid || '';
+    var inp = document.getElementById('bdt-lid'); if (inp) inp.value = M.lid ? lidTxt(M.lid) : '';
+  }
+
   function abrir() {
     if (!ULT) return;
-    openSheet('<div class="grip"></div><div class="bdt-head"><h2 class="h2">Crecimiento por mes</h2><button class="btn btn-ghost" data-close>Cerrar</button></div><div id="bdt-hoja">' + cuerpoHoja(ULT.tend) + '</div>', 'bdt-sheet');
-    var g = document.querySelector('#bdt-hoja .bdt-graf'); if (g) g.scrollLeft = g.scrollWidth;   // los meses recientes a la vista
+    M.lid = BD_LID || ''; M.tab = 'graf';   // abre con lo mismo que filtra la lista ('' = toda la base)
+    openSheet('<div class="grip"></div><div class="bdt-head"><h2 class="h2">Crecimiento por mes</h2><button class="btn btn-ghost" data-close>Cerrar</button></div>' +
+      '<div class="bdt-tabs" role="tablist"><button type="button" class="bd-chip active" data-tab="graf" role="tab">Gráfica</button><button type="button" class="bd-chip" data-tab="rank" role="tab">Clasificación de líderes</button></div>' +
+      '<div class="bdt-lidbox" id="bdt-lidbox"><span class="bd-chips-lbl">Líder:</span>' + comboboxHtml('bdt-lid', 'Todos los líderes · busca por nombre o número') + '</div>' +
+      '<div id="bdt-hoja"></div>', 'bdt-sheet');
+    var lista = ['Todos los líderes', 'Sin líder asignado'].concat((BD_LIDERES || []).map(bdLiderLabel));
+    bindCombobox('bdt-lid', lista);
+    var inp = document.getElementById('bdt-lid'), ll = document.getElementById('bdt-lid-list');
+    ponerLid(M.lid);
+    function leer() {
+      var v = bdLidDeTexto(inp.value);
+      if (v === null || v === M.lid) return;
+      M.lid = v; pintarHoja(true);
+    }
+    if (ll) ll.addEventListener('click', function () { setTimeout(function () { leer(); inp.blur(); }, 0); });
+    var tt = null;
+    inp.addEventListener('input', function () { clearTimeout(tt); tt = setTimeout(leer, 250); });
+    inp.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== inp && bdLidDeTexto(inp.value) !== M.lid) ponerLid(M.lid); }, 200); });
+    document.querySelector('.bdt-tabs').addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-tab]'); if (!b || b.dataset.tab === M.tab) return;
+      M.tab = b.dataset.tab; pintarHoja(true);
+    });
+    document.getElementById('bdt-hoja').addEventListener('click', function (ev) {
+      var o = ev.target.closest('[data-ord]'); if (o) { M.ord = o.dataset.ord; pintarHoja(true); return; }
+      if (ev.target.closest('[data-ceros]')) { M.ceros = !M.ceros; pintarHoja(false); return; }
+      var f = ev.target.closest('[data-lid]'); if (f) { ponerLid(f.dataset.lid === 'SIN' ? 'SIN' : f.dataset.lid); M.tab = 'graf'; pintarHoja(true); }
+    });
+    pintarHoja(true);
   }
 
   /* ---------- entrada ---------- */
@@ -210,10 +347,10 @@
       pintarChips(ULT);
       pintarFranja(ULT.tend);
       if (window.bdActPintar) bdActPintar();   /* 09/11/2026 · fila de actividad (bd-actividad.js) */
-      var hoja = document.getElementById('bdt-hoja');
-      if (hoja) { var sl = (hoja.querySelector('.bdt-graf') || {}).scrollLeft; hoja.innerHTML = cuerpoHoja(ULT.tend); var g = hoja.querySelector('.bdt-graf'); if (g && sl != null) g.scrollLeft = sl; }
+      if (document.getElementById('bdt-hoja')) pintarHoja(false);   // EN VIVO con la hoja abierta
     } catch (err) { try { console.warn('bdTablero', err); } catch (x) {} }
     try { window.RED && RED.pantalla && RED.pantalla('bd.tablero', performance.now() - t0); } catch (x) {}
   };
   window.bdTableroUltimo = function () { return ULT; };   // para medir/verificar desde la consola
+  window.bdTableroHoja = function () { return { lid: M.lid, tab: M.tab, ord: M.ord }; };
 })();

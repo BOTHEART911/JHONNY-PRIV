@@ -1456,7 +1456,10 @@ async function viewBaseDatos(user) {
   /* 13/10/2026 · carga única por sesión: la segunda visita pinta al instante
      desde la caché y solo vuelve al servidor si /meta dice que algo cambió. */
   let primera = true;
-  BD_INT.clear();
+  /* 18/11/2026 · al entrar (o volver) TODOS los filtros arrancan en blanco,
+     igual que lo que se ve: antes BD_LID guardaba el líder elegido en la
+     visita anterior mientras la casilla decía "Todos" (filtro escondido). */
+  BD_INT.clear(); BD_LID = '';
   if (window.bdActReiniciar) bdActReiniciar();
   try {
     /* act=1 (09/11/2026): la lista trae quién tiene servicios, compromisos,
@@ -1547,19 +1550,51 @@ async function vivoBd(rev) {
    Se filtra por REFERENCIA (el código), no por el texto de la columna
    LIDER: el código es el que vincula de verdad al referido con su líder. */
 function bdLiderLabel(l) { return `#${l.codigo} · ${l.nombre}`; }
+/* 18/11/2026 · UNA sola regla del filtro de líder (lista, conteos, tendencia
+   y la gráfica por líder de bd-tablero.js). lid: '' = todos, 'SIN', código. */
+function bdPasaLid(c, lid) {
+  if (lid === 'SIN') return !String(c.referencia || '');
+  if (lid) return String(c.referencia || '') === String(lid);
+  return true;
+}
+/* Texto que debe mostrar la casilla para un código de líder ('' = vacía). */
+function bdLidTexto(lid) {
+  if (lid === 'SIN') return 'Sin líder asignado';
+  if (!lid) return '';
+  const l = BD_LIDERES.find(x => String(x.codigo) === String(lid));
+  return l ? bdLiderLabel(l) : '#' + lid;
+}
+/* Lee la casilla → código. null = texto a medio escribir (no cambia nada):
+   solo vale una opción COMPLETA de la lista ("#1" no es el líder 1 mientras
+   se escribe "#13"). */
+function bdLidDeTexto(v) {
+  v = String(v || '').trim();
+  if (!v || /^todos los l/i.test(v)) return '';
+  if (/^sin l[ií]der asignado$/i.test(v)) return 'SIN';
+  const m = v.match(/^#(\d+) · /); if (!m) return null;
+  const l = BD_LIDERES.find(x => String(x.codigo) === m[1]);
+  return l && bdLiderLabel(l).toLowerCase() === v.toLowerCase() ? m[1] : null;
+}
 function bdBindLiderCombo() {
   const lista = ['Todos los líderes', 'Sin líder asignado'].concat(BD_LIDERES.map(bdLiderLabel));
   bindCombobox('bd-lid', lista);
   const inp = $('#bd-lid'), list = $('#bd-lid-list'); if (!inp) return;
-  inp.value = '';
+  inp.value = bdLidTexto(BD_LID);   // la casilla SIEMPRE dice lo que se filtra
   const leer = () => {
     if (!$('#bd-count')) return;   // se salió de la vista con el debounce en vuelo
-    const v = String(inp.value || '').trim();
-    if (!v || /^todos/i.test(v)) BD_LID = '';
-    else if (/^sin l/i.test(v)) BD_LID = 'SIN';
-    else { const m = v.match(/^#(\d+)/); BD_LID = m ? m[1] : ''; }
+    const nuevo = bdLidDeTexto(inp.value);
+    if (nuevo === null || nuevo === BD_LID) return;   // a medio escribir o sin cambio
+    BD_LID = nuevo;
     bdApplyFilter();
   };
+  /* Al salir de la casilla con texto a medias se devuelve el líder vigente:
+     nunca queda escrito algo distinto de lo que filtra la lista. */
+  inp.addEventListener('blur', () => setTimeout(() => {
+    if (document.activeElement === inp) return;
+    const v = bdLidDeTexto(inp.value);
+    if (v === null) inp.value = bdLidTexto(BD_LID);
+
+  }, 200));
   /* bindCombobox pisa .oninput y NO dispara 'change' al elegir una opción:
      por eso se escucha el clic en la lista (delegado, así corre DESPUÉS de
      que la opción escribe el valor) y el tecleo con addEventListener. */
@@ -1573,7 +1608,7 @@ function bdFiltroTxt() {
   const p = [];
   const f = bdActiveFilter(); if (f && f !== 'Todos') p.push(f);
   if (BD_LID === 'SIN') p.push('Sin líder asignado');
-  else if (BD_LID) { const l = BD_LIDERES.find(x => String(x.codigo) === String(BD_LID)); p.push('Líder: ' + (l ? bdLiderLabel(l) : '#' + BD_LID)); }
+  else if (BD_LID) p.push('Líder: ' + bdLidTexto(BD_LID));
   if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
   if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
   const q = (($('#bd-q') || {}).value || '').trim(); if (q) p.push('Búsqueda: “' + q + '”');
@@ -1698,6 +1733,9 @@ function bdBuildIntChips() {
     const v = String(c.intencion || '').trim();
     if (v) conteo[v] = (conteo[v] || 0) + 1;
   });
+  /* 18/11/2026 · una intención MARCADA se queda en pantalla aunque ya no
+     tenga registros (EN VIVO): si desapareciera, filtraría sin verse. */
+  BD_INT.forEach(v => { if (!(v in conteo)) conteo[v] = 0; });
   const valores = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
   if (!valores.length) { cont.innerHTML = ''; return; }
   cont.innerHTML = `<span class="bd-chips-lbl">Intención:</span>` +
@@ -1743,11 +1781,10 @@ function bdPasaChip(c, f) {
   if (f === 'Otros') return !(MV.esMunicipio(mun) || ['SIN CONSULTAR','A LA ESPERA','POR CONFIRMAR'].indexOf(mun) !== -1);
   return true;                                          // Todos
 }
-function bdPasaResto(c, q, sinInt, sinAct) {
+function bdPasaResto(c, q, sinInt, sinAct, sinLid) {
   if (!sinAct && window.bdActPasa && !bdActPasa(c)) return false;   /* 09/11/2026 · Servicios/Compromisos/Eventos/Formularios */
   if (!sinInt && BD_INT.size && !BD_INT.has(String(c.intencion || '').trim())) return false;
-  if (BD_LID === 'SIN') { if (String(c.referencia || '')) return false; }
-  else if (BD_LID && String(c.referencia || '') !== String(BD_LID)) return false;
+  if (!sinLid && !bdPasaLid(c, BD_LID)) return false;   /* 18/11/2026 · sinLid: la gráfica por líder */
   if (q) {
     const hay = (String(c.nombre||'') + ' ' + String(c.documento||'') + ' ' + String(c.residencia||'')).toLowerCase();
     if (!hay.includes(q)) return false;
