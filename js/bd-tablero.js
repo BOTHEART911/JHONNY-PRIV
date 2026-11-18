@@ -266,8 +266,8 @@
           '<span class="bdr-barra"><i class="' + (clave === 'dif' && x.dif < 0 ? 'neg' : '') + '" style="width:' + w + '%"></i></span></span>' +
         seisMini(x.seis) +
         '<span class="bdr-n"><b>+' + n(x.mes) + '</b><span class="bdt-var ' + v.cls + '">' + e(v.txt) + '</span></span>' +
-        '<span class="bdr-n bdr-o"><b>' + n(x.tri) + '</b><span>3 meses</span></span>' +
-        '<span class="bdr-n bdr-o"><b>' + n(x.total) + '</b><span>total</span></span>' +
+        '<span class="bdr-n bdr-o' + (clave !== 'total' ? ' bdr-k' : '') + '"><b>' + n(x.tri) + '</b><span>3 meses</span></span>' +
+        '<span class="bdr-n bdr-o' + (clave === 'total' ? ' bdr-k' : '') + '"><b>' + n(x.total) + '</b><span>total</span></span>' +
       '</button>';
     }).join('');
     var html =

@@ -96,6 +96,6 @@ html.oscuro #bd-chips .bd-chip.active .bd-chip-n, html.oscuro .bd-chip-int.activ
 .bdr-ceros { margin-top: 8px; width: 100%; }
 @media (max-width: 560px) {
   .bdr-fila { grid-template-columns: 24px minmax(0, 1fr) 84px 52px; gap: 8px; }
-  .bdr-mini, .bdr-o:last-child { display: none; }
+  .bdr-mini, .bdr-o:not(.bdr-k) { display: none; }   /* en angosto: la columna por la que se ordena */
   .bdt-lidbox .combo { max-width: none; }
 }
