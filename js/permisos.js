@@ -43,6 +43,7 @@
     ['#bd-body [data-a="detalles"]', 'bd.detalles'],
     ['#bd-body [data-a="editar"]', 'bd.editar'],
     ['#bd-body [data-a="consultar"]', 'bd.consultar'],
+    ['#bd-body [data-a="reasignar"]', 'bd.reasignar'],   /* 18/11/2026 · botón de la tarjeta */
     ['#bd-body [data-a="inactivar"]', 'bd.inactivar'],
     ['#bd-body [data-a="eliminar"]', 'bd.eliminar'],   /* 12/11/2026 · pendiente por eliminar */
     ['#det-edit', 'bd.editar'],

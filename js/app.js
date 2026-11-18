@@ -385,6 +385,8 @@ const I = {
   book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M19 19v3H6.5"/><path d="M8 7h7M8 11h5"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>',
   logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
+  lupa:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  userOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/></svg>',
   swap:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3 21 7l-4 4"/><path d="M21 7H9"/><path d="M7 21 3 17l4-4"/><path d="M3 17h12"/></svg>',
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
   reload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
@@ -1356,6 +1358,12 @@ function fmtFechaLarga(s) {
   return `${BD_DIAS[d.getDay()]}, ${+m[1]} de ${BD_MESES[+m[2] - 1]} de ${m[3]}${hora}`;
 }
 
+/* 18/11/2026 · botones de la tarjeta solo con ícono (ocupan menos): el nombre
+   va en title y aria-label (lector de pantalla y punta del mouse). */
+function bdIcBtn(a, ic, txt, cls, off) {
+  return `<button class="bd-btn bd-ic ${cls || ''}" data-a="${a}" title="${txt}" aria-label="${txt}" ${off ? 'disabled' : ''}>${ic}</button>`;
+}
+
 function bdCardHtml(c) {
   const inact = c.estado === 'INACTIVO';
   const fechaTxt = c.fechaActualizacion
@@ -1376,13 +1384,14 @@ function bdCardHtml(c) {
       <span><span class="bd-k">Intención</span> ${esc(c.intencion || '—')}</span>
     </div>
     ${fechaTxt ? `<div class="bd-fecha">${esc(fechaTxt)}</div>` : ''}
-    <div class="bd-acts">
-      <button class="bd-btn" data-a="detalles">Detalles</button>
-      <button class="bd-btn" data-a="editar">Editar</button>
-      <button class="bd-btn" data-a="consultar">Consultar</button>
+    <div class="bd-acts bd-acts-ic">
+      ${bdIcBtn('detalles', I.eyeOn, 'Detalles')}
+      ${bdIcBtn('editar', I.pencil, 'Editar')}
+      ${bdIcBtn('consultar', I.lupa, 'Consultar puesto')}
+      ${bdIcBtn('reasignar', I.swap, 'Reasignar líder', 'bd-btn-reasg')}
       ${bdPorEliminar(c)
-        ? '<button class="bd-btn bd-btn-danger" data-a="eliminar">Eliminar</button>'
-        : `<button class="bd-btn bd-btn-danger" data-a="inactivar" ${inact ? 'disabled' : ''}>Inactivar</button>`}
+        ? bdIcBtn('eliminar', I.trash, 'Eliminar', 'bd-btn-danger')
+        : bdIcBtn('inactivar', I.userOff, 'Inactivar', 'bd-btn-danger', inact)}
     </div>
   </article>`;
 }
@@ -1874,6 +1883,7 @@ function bdAccion(a, doc) {
   if (a === 'detalles') { (window.tzDetalles ? tzDetalles(doc) : bdDetalles(doc)); return; }   // 07/11/2026: Trazabilidad
   if (a === 'editar') return bdEditar(doc);
   if (a === 'consultar') return bdConsultar(doc, card);
+  if (a === 'reasignar') return bdReasignar(doc, card);   /* 18/11/2026 */
   if (a === 'inactivar') return bdInactivar(doc, card);
   if (a === 'eliminar') return bdEliminar(doc, card);   /* 12/11/2026 · pendiente por eliminar */
 }
@@ -1982,6 +1992,66 @@ function bdRemoveCard(doc) {
   const node = $(`#bd-grid .bd-card[data-doc="${cssq(doc)}"]`);
   if (node) node.remove();
   bdApplyFilter();
+}
+
+/* ---- REASIGNAR (18/11/2026) · cambiar de líder desde la tarjeta ----
+   Un viaje (priv.personaReasignar, ya existía: devuelve la tarjeta). La
+   lista se parcha en memoria; con un filtro de líder puesto, la tarjeta
+   sale de la lista al instante. "Pasar a…" repite el último líder elegido
+   en esta sesión para reasignar varios seguidos con un toque. */
+let BD_REASG_ULT = '';
+/* Si la tarjeta ya no cumple los filtros vigentes, se quita EN SITIO: la lista
+   no se repinta y quien va bajando por ella no pierde su lugar. */
+function bdSiSaleDelFiltro(card) {
+  if (bdPasaChip(card, bdActiveFilter()) && bdPasaResto(card, bdQ())) return;
+  const d = normDocJs(card.documento);
+  const i = BD_FILT.findIndex(x => normDocJs(x.documento) === d);
+  if (i >= 0) { BD_FILT.splice(i, 1); if (i < BD_SHOWN) BD_SHOWN--; }
+  const node = $(`#bd-grid .bd-card[data-doc="${cssq(card.documento)}"]`);
+  if (node) node.remove();
+  const cnt = $('#bd-count'); if (cnt) cnt.textContent = `${BD_FILT.length.toLocaleString('es-CO')} registro(s)`;
+  if (window.bdTablero) bdTablero();
+}
+function bdReasignar(doc, card) {
+  card = card || BD_ALL.find(x => normDocJs(x.documento) === normDocJs(doc));
+  if (!card) return;
+  const actual = String(card.referencia || '');
+  const lActual = BD_LIDERES.find(l => String(l.codigo) === actual);
+  const ult = BD_REASG_ULT && BD_REASG_ULT !== actual ? BD_LIDERES.find(l => String(l.codigo) === BD_REASG_ULT) : null;
+  openSheet(`<div class="grip"></div>
+    <h2 class="h2" style="margin-bottom:4px;">Reasignar líder</h2>
+    <p class="muted small" style="margin:0 0 10px;">${esc(card.nombre || '')} · CC ${esc(doc)}</p>
+    <div class="reasg-cur"><span>Líder actual</span><b>${esc(lActual ? bdLiderLabel(lActual) : (actual ? '#' + actual : 'Sin líder'))}</b></div>
+    ${ult ? `<button class="btn btn-ghost btn-block bd-reasg-ult" id="reasg-ult" style="margin-top:12px;">${I.swap} Pasar a ${esc(bdLiderLabel(ult))}</button>` : ''}
+    <label class="field" style="margin-top:12px;"><span>Nuevo líder</span>${comboboxHtml('reasg-lid', 'Escribe nombre o número del líder…')}</label>
+    <button class="btn btn-primary btn-block" id="reasg-save" style="margin-top:14px;">Reasignar</button>
+    <button class="btn btn-quiet btn-block" data-close style="margin-top:8px;">Cancelar</button>`, 'reasg-sheet');
+  bindCombobox('reasg-lid', BD_LIDERES.filter(l => String(l.codigo) !== actual).map(bdLiderLabel));
+  const inp = $('#reasg-lid');
+  const enviar = async (code, btn) => {
+    if (!code) return toast('Elige un líder de la lista', 'err');
+    if (code === actual) return toast('Ese ya es su líder', 'err');
+    const t0 = performance.now();
+    saving(btn, true);
+    try {
+      const r = await api('priv.personaReasignar', {}, 'POST', { ...auth(), documento: doc, referencia: code });
+      saving(btn, false);
+      if (!r.ok) return toast(r.msg || 'No se pudo reasignar', 'err');
+      BD_REASG_ULT = code;
+      closeLayer();
+      if (r.card) { bdUpsertCard(r.card); bdSiSaleDelFiltro(r.card); }   // con filtro de líder, sale de la lista (sin repintar ni perder el sitio)
+      RAP.olvidar('priv.lideres'); RAP.olvidar('priv.liderReferidos:' + actual); RAP.olvidar('priv.liderReferidos:' + code);
+      const l = BD_LIDERES.find(x => String(x.codigo) === code);
+      toast(`Reasignado a ${l ? bdLiderLabel(l) : '#' + code}`, 'ok');
+      if (window.RED && RED.pantalla) { try { RED.pantalla('bd.reasignar', Math.round(performance.now() - t0)); } catch (e) {} }
+    } catch (e) { fallaRed(e); saving(btn, false); }
+  };
+  const ub = $('#reasg-ult'); if (ub) ub.onclick = () => enviar(String(ult.codigo), ub);
+  $('#reasg-save').onclick = () => {
+    const m = /^#(\d+)/.exec(String((inp && inp.value) || '').trim());
+    enviar(m ? m[1] : '', $('#reasg-save'));
+  };
+  if (inp && !ult) inp.focus();
 }
 
 /* ---- INACTIVAR ---- */

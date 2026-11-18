@@ -724,6 +724,12 @@ body.wide .com-card { max-width: 360px; margin: 0 auto; width: 100%; }
 .cfg-row-a .bd-btn[data-usbien] { background: #E3F7EA; color: #128C4A; }
 .cfg-row-a .bd-btn[data-unb] { background: #E3F7EA; color: #128C4A; }
 .bd-btn-reasg { background: #EAE6FB; color: #5B3FB0; }
+/* 18/11/2026 · tarjeta de Base de datos: botones solo con ícono */
+.bd-acts-ic { flex-wrap: nowrap; gap: 6px; }
+.bd-acts-ic .bd-ic { flex: 1 1 0; min-width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; }
+.bd-acts-ic .bd-ic svg { width: 17px; height: 17px; }
+.bd-reasg-ult { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.bd-reasg-ult svg { width: 16px; height: 16px; }
 .reasg-cur { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2, #F2F5FA); border-radius: 12px; padding: 10px 12px; }
 .reasg-cur span { color: var(--muted); font-size: 12.5px; }
 .reasg-cur b { font-family: var(--font-display); font-weight: 800; text-align: right; }

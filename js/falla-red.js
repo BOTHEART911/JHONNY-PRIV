@@ -35,7 +35,7 @@
     'priv.bdExcel': 'descargar el Excel de la base de datos', 'priv.bdPdf': 'generar el PDF de la base de datos',
     'priv.bdPendRevisar': 'revisar los pendientes', 'priv.bdNuevoLote': 'subir los pendientes', 'priv.bdReiniciarAsis': 'reiniciar las asistencias',
     'priv.persona': 'abrir la persona', 'priv.personaAgregar': 'agregar la persona', 'priv.personaEditar': 'guardar los cambios de la persona',
-    'priv.personaEliminar': 'eliminar la persona', 'priv.personaInactivar': 'inactivar la persona', 'priv.personaReasignarLote': 'reasignar las personas',
+    'priv.personaEliminar': 'eliminar la persona', 'priv.personaInactivar': 'inactivar la persona', 'priv.personaReasignarLote': 'reasignar las personas', 'priv.personaReasignar': 'reasignar la persona',
     'priv.validarDoc': 'validar el documento', 'priv.trazabilidad': 'cargar los detalles', 'priv.trazabilidadLote': 'cargar los detalles',
     'priv.lideres': 'cargar los líderes', 'priv.liderVer': 'abrir el líder', 'priv.liderReferidos': 'cargar los referidos del líder',
     'priv.liderNuevoMeta': 'preparar el formulario del líder', 'priv.liderBuscarDoc': 'buscar el documento', 'priv.liderAhijados': 'cargar los líderes a cargo',
