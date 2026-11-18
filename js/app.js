@@ -1564,12 +1564,16 @@ function bdLidTexto(lid) {
   const l = BD_LIDERES.find(x => String(x.codigo) === String(lid));
   return l ? bdLiderLabel(l) : '#' + lid;
 }
-/* Lee la casilla → código. null = texto a medio escribir (no cambia nada). */
+/* Lee la casilla → código. null = texto a medio escribir (no cambia nada):
+   solo vale una opción COMPLETA de la lista ("#1" no es el líder 1 mientras
+   se escribe "#13"). */
 function bdLidDeTexto(v) {
   v = String(v || '').trim();
-  if (!v || /^todos/i.test(v)) return '';
-  if (/^sin l/i.test(v)) return 'SIN';
-  const m = v.match(/^#(\d+)/); return m ? m[1] : null;
+  if (!v || /^todos los l/i.test(v)) return '';
+  if (/^sin l[ií]der asignado$/i.test(v)) return 'SIN';
+  const m = v.match(/^#(\d+) · /); if (!m) return null;
+  const l = BD_LIDERES.find(x => String(x.codigo) === m[1]);
+  return l && bdLiderLabel(l).toLowerCase() === v.toLowerCase() ? m[1] : null;
 }
 function bdBindLiderCombo() {
   const lista = ['Todos los líderes', 'Sin líder asignado'].concat(BD_LIDERES.map(bdLiderLabel));
@@ -1589,7 +1593,7 @@ function bdBindLiderCombo() {
     if (document.activeElement === inp) return;
     const v = bdLidDeTexto(inp.value);
     if (v === null) inp.value = bdLidTexto(BD_LID);
-    else if (v === '' && inp.value && !/^todos/i.test(inp.value.trim())) inp.value = '';
+
   }, 200));
   /* bindCombobox pisa .oninput y NO dispara 'change' al elegir una opción:
      por eso se escucha el clic en la lista (delegado, así corre DESPUÉS de
