@@ -22,6 +22,7 @@
 .fm-n span { font-size: 13px; color: var(--muted); }
 .fm-n-off b { color: var(--muted); }
 .fm-vivo { font: 800 9.5px/1 var(--font-display); letter-spacing: .8px; color: var(--ok); font-style: normal; padding: 4px 7px; border-radius: 999px; background: rgba(30,158,106,.12); margin-left: auto; position: relative; padding-left: 15px; }
+/* impeccable-disable pulsing-dot: marca EN VIVO real del formulario abierto */
 .fm-vivo::before { content: ''; position: absolute; left: 6px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: var(--ok); animation: fmlate 1.4s infinite; }
 @keyframes fmlate { 50% { opacity: .25; } }
 .fm-pulso b { animation: fmpulso .6s ease; }
@@ -63,7 +64,7 @@
 .fm-drop-acts { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
 .fm-drop-acts .btn { padding: 7px 12px; font-size: 13px; box-shadow: var(--sh-1); }
 .fm-fijos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.fm-fijo { background: var(--bg); border-radius: var(--r-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; border-left: 3px solid var(--brand); }
+.fm-fijo { background: var(--bg); border-radius: var(--r-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; border: 2px solid var(--brand); }
 .fm-fijo b { font-size: 12.5px; color: var(--ink); }
 .fm-fijo span { font-size: 11.5px; color: var(--muted); }
 .fm-check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
@@ -78,7 +79,7 @@
 .fm-campos { display: flex; flex-direction: column; gap: 8px; }
 .fm-sin { margin: 0; }
 .fm-campo { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); transition: box-shadow .15s; }
-.fm-campo.hija { margin-left: 22px; border-left: 3px solid var(--gold); }
+.fm-campo.hija { margin-left: 22px; border: 2px solid var(--gold); }
 .fm-campo.abierto { box-shadow: 0 0 0 2px var(--brand-050), var(--sh-1); border-color: var(--brand); }
 .fm-campo.con-error { border-color: var(--danger); }
 .fm-campo.arrastrando { opacity: .85; box-shadow: var(--sh-2); transform: scale(1.01); z-index: 2; position: relative; }
@@ -238,7 +239,7 @@ html.oscuro .fmd-lider { color: #6fe0b0; }
 .fmd-btn-conf:disabled, .fmd-btn-desc:disabled, .fmd-ic:disabled { opacity: .6; cursor: default; }
 .fmd-conf { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: .76rem; font-weight: 700; color: #0f6b47; background: rgba(30,158,106,.16); padding: 3px 9px; border-radius: 999px; max-width: 100%; white-space: normal; }
 .fmd-conf svg { width: 13px; height: 13px; flex: 0 0 auto; }
-.fmd-card.fmd-confirmado { border-color: rgba(30,158,106,.55); box-shadow: inset 4px 0 0 #1E9E6A; }
+.fmd-card.fmd-confirmado { border: 2px solid #1E9E6A; background: #F3FBF7; }
 .fmd-ov.fmd-ov-fijo { position: fixed; z-index: 75; border-radius: 0; }
 .fmd-btn-desc-ok { background: #D92D20; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .fmd-btn-desc-ok svg { width: 17px; height: 17px; }

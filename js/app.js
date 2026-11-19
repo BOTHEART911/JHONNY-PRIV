@@ -395,6 +395,7 @@ const I = {
   lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
   db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>',
   star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 8.5 22 9.3 17 14 18.2 21 12 17.5 5.8 21 7 14 2 9.3 9 8.5 12 2"/></svg>',
+  evento:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18M5 4v10h14V4M12 14v4M8 21l4-3 4 3"/></svg>',   /* 18/11/2026 · Eventos: tarima (Agenda conserva el calendario) */
   cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   cal2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
@@ -430,7 +431,7 @@ const I = {
 const MENU = [
   { id:'bd',            icon:'db',    title:'Base de Datos',        desc:'Nuestros registros', wide:true },
   { id:'lideres',       icon:'star',  title:'Líderes',              desc:'Coordinadores y referidos' },
-  { id:'eventos',       icon:'cal',   title:'Eventos',              desc:'Reuniones generales' },
+  { id:'eventos',       icon:'evento',   title:'Eventos',              desc:'Reuniones generales' },
   { id:'agenda',        icon:'cal2',  title:'Agenda',               desc:'Calendario de reuniones' },
   { id:'compromisos',   icon:'check', title:'Compromisos',          desc:'Seguimiento y estados' },
   { id:'formularios',   icon:'form',  title:'Formularios',          desc:'Inscripciones y jornadas' },   /* 07/11/2026 */
@@ -831,6 +832,7 @@ function viewHome(user) {
         <h1 class="h1">Hola, ${esc(primerNombre(user.nombre))} 👋🏾</h1>
         <span class="rol-badge ${rol === 'DESARROLLADOR' ? 'dev' : rol === 'INVITADO' ? 'inv' : 'admin'}">${esc(rolLabel(rol))}</span>
       </div>
+      <div class="mc-top" id="mc-top"></div>   <!-- 18/11/2026 · Marcador (js/marcador.js) -->
       <p class="eyebrow" style="margin-top:6px;">Módulos</p>
       <div class="menu-grid">
         ${menu.map(m => {
@@ -842,9 +844,11 @@ function viewHome(user) {
           </button>`;
         }).join('')}
       </div>
+      <div id="mc-an"></div>
       <p class="center small muted" style="margin-top:10px;">${esc(MV.candidato)} · ${esc(MV.lugar)}</p>
     </div>`;
   app.hidden = false; hideSplash(); bindAppbar(user); appWide(true);   /* 23/07: Inicio tambien se expande en PC */
+  if (window.MARCADOR) MARCADOR.inicio(user);   /* 18/11/2026 · análisis a primera vista, de fondo y sin rutas nuevas */
   app.querySelectorAll('.tile:not(.soon)').forEach(t => t.onclick = () => openModulo(t.dataset.id, user));
   refrescarMiFoto(user);
 }
@@ -1470,6 +1474,11 @@ async function viewBaseDatos(user) {
      visita anterior mientras la casilla decía "Todos" (filtro escondido). */
   BD_INT.clear(); BD_LID = '';
   if (window.bdActReiniciar) bdActReiniciar();
+  /* 18/11/2026 · Marcador del Inicio: llega con un filtro puesto y VISIBLE
+     (pastilla marcada), p. ej. «Sin preguntar» o «Por confirmar». */
+  { const pre = window.BD_PRESET; window.BD_PRESET = null;
+    if (pre && pre.int) pre.int.forEach(v => BD_INT.add(v));
+    if (pre && pre.chip) { const ch = $(`#bd-chips .bd-chip[data-f="${cssq(pre.chip)}"]`); if (ch) { $$('#bd-chips .bd-chip').forEach(x => x.classList.remove('active')); ch.classList.add('active'); } } }
   try {
     /* act=1 (09/11/2026): la lista trae quién tiene servicios, compromisos,
        eventos y formularios (fila de filtros por actividad, bd-actividad.js) */
@@ -1618,7 +1627,7 @@ function bdFiltroTxt() {
   const f = bdActiveFilter(); if (f && f !== 'Todos') p.push(f);
   if (BD_LID === 'SIN') p.push('Sin líder asignado');
   else if (BD_LID) p.push('Líder: ' + bdLidTexto(BD_LID));
-  if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
+  if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).map(function (v) { return v || 'Sin preguntar'; }).join(', '));
   if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
   const q = (($('#bd-q') || {}).value || '').trim(); if (q) p.push('Búsqueda: “' + q + '”');
   return p.length ? p.join(' · ') : 'Todos los registros';
@@ -1740,7 +1749,7 @@ function bdBuildIntChips() {
   BD_ALL.forEach(c => {
     if (c.estado === 'INACTIVO') return;
     const v = String(c.intencion || '').trim();
-    if (v) conteo[v] = (conteo[v] || 0) + 1;
+    conteo[v] = (conteo[v] || 0) + 1;   /* 18/11/2026 · Marcador: '' = «Sin preguntar» (antes no se podía filtrar) */
   });
   /* 18/11/2026 · una intención MARCADA se queda en pantalla aunque ya no
      tenga registros (EN VIVO): si desapareciera, filtraría sin verse. */
@@ -1748,7 +1757,7 @@ function bdBuildIntChips() {
   const valores = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
   if (!valores.length) { cont.innerHTML = ''; return; }
   cont.innerHTML = `<span class="bd-chips-lbl">Intención:</span>` +
-    valores.map(v => `<button class="bd-chip bd-chip-int" data-int="${esc(v)}">${esc(v)} <span class="bd-chip-n">${conteo[v].toLocaleString('es-CO')}</span></button>`).join('');
+    valores.map(v => `<button class="bd-chip bd-chip-int${v ? '' : ' bd-chip-sinint'}" data-int="${esc(v)}">${v ? esc(v) : 'Sin preguntar'} <span class="bd-chip-n">${conteo[v].toLocaleString('es-CO')}</span></button>`).join('');
   $$('#bd-chips-int .bd-chip-int').forEach(ch => ch.onclick = () => {
     const v = ch.dataset.int;
     if (BD_INT.has(v)) BD_INT.delete(v); else BD_INT.add(v);

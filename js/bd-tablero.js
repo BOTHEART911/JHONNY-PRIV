@@ -60,7 +60,7 @@
       var conInt = !BD_INT.size || BD_INT.has(String(c.intencion || '').trim());
       if (okLid && conInt) for (var j = 0; j < etiquetas.length; j++) if (bdPasaChip(c, etiquetas[j])) chips[etiquetas[j]]++;
       if (bdPasaChip(c, f)) {
-        if (okLid) { var v = String(c.intencion || '').trim(); if (v) ints[v] = (ints[v] || 0) + 1; }
+        if (okLid) { var v = String(c.intencion || '').trim(); ints[v] = (ints[v] || 0) + 1; }   /* 18/11 · '' = Sin preguntar */
         if (conInt) { base.push(c); if (okLid) visibles.push(c); }
       }
     }
@@ -158,7 +158,7 @@
   function filtrosTxt() {
     var p = [], f = bdActiveFilter();
     if (f && f !== 'Todos') p.push(f);
-    if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).join(', '));
+    if (BD_INT.size) p.push('Intención: ' + Array.from(BD_INT).map(function (v) { return v || 'Sin preguntar'; }).join(', '));
     if (window.bdActTxt && bdActTxt()) p.push('Con ' + bdActTxt());
     var q = bdQ(); if (q) p.push('Búsqueda: "' + q + '"');
     return p.join(' · ');

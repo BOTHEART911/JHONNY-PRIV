@@ -256,6 +256,7 @@
 .ia-cargando { display: flex; align-items: center; gap: 10px; }
 .ia-carga-tx { color: var(--muted); font-size: 13.5px; }
 .ia-pts { display: inline-flex; gap: 4px; }
+/* impeccable-disable pulsing-dot: indicador de «pensando» del analista (solo mientras responde) */
 .ia-pts i {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -313,7 +314,7 @@
 
 /* ---------- Aviso de la tarjeta de Configuración ---------- */
 .ia-cfg-aviso {
-  border-left: 3px solid var(--danger);
+  border: 2px solid var(--danger);
   padding-left: 10px;
 }
 

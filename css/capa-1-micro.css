@@ -40,7 +40,7 @@
 button.nt-kpi,
 .cm-kpi,
 .an-bar-row[role="button"] {
-  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1),
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1),
               background .15s ease,
               box-shadow .2s ease;
   -webkit-tap-highlight-color: transparent;
@@ -75,7 +75,7 @@ button:disabled:active { transform: none; }
 
 /* ---------- 2. Rebote del segmento / chip activo ---------- */
 .seg-b.active,
-.bd-chip.active { animation: np-pop-in .34s cubic-bezier(.34, 1.56, .64, 1); }
+.bd-chip.active { animation: np-pop-in .34s cubic-bezier(.2, .8, .2, 1); }
 
 @keyframes np-pop-in {
   0%   { transform: scale(.86); }
@@ -115,7 +115,7 @@ html:not(.np-tx) #app:not([hidden]) { animation: np-view-fade .26s ease-out; }
 /* style.css ya trae `animation: up .28s`; lo sustituyo con una curva
    con un pelín de resorte. Necesita !important por ser la misma
    especificidad y estar declarado en otro archivo. */
-.sheet { animation: np-sheet-in .34s cubic-bezier(.2, .9, .25, 1.04) !important; }
+.sheet { animation: np-sheet-in .34s cubic-bezier(.2, .8, .2, 1) !important; }
 
 @keyframes np-sheet-in {
   from { transform: translateY(100%); }
@@ -123,7 +123,7 @@ html:not(.np-tx) #app:not([hidden]) { animation: np-view-fade .26s ease-out; }
 }
 
 /* El toast entra con un empujón corto */
-.toast { animation: np-toast-in .26s cubic-bezier(.34, 1.56, .64, 1); }
+.toast { animation: np-toast-in .26s cubic-bezier(.2, .8, .2, 1); }
 
 @keyframes np-toast-in {
   from { opacity: 0; transform: translateY(12px) scale(.96); }
