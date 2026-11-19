@@ -79,7 +79,8 @@
   }
 
   /* ---------- pintar ---------- */
-  function rueda(cls) { return YA_RODO ? '' : ' ' + (cls || 'mc-rueda'); }
+  /* pestaña oculta: sin animación (el reloj de animaciones se congela y dejaría las cifras invisibles) */
+  function rueda(cls) { return (YA_RODO || document.hidden) ? '' : ' ' + (cls || 'mc-rueda'); }
 
   function htmlMarcador(b) {
     var muni = (window.MV && MV.municipio) || '';

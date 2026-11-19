@@ -1385,7 +1385,7 @@ function bdCardHtml(c) {
     ${bdSelloMotivo(c)}
     <div class="bd-meta">
       <span><span class="bd-k">Residencia</span> ${esc(c.residencia || '—')}</span>
-      <span><span class="bd-k">Intención</span> ${esc(c.intencion || '—')}</span>
+      <span><span class="bd-k">Intención</span> ${c.intencion ? esc(c.intencion) : '<span class="bd-sinint">Sin preguntar</span>'}</span>
     </div>
     ${fechaTxt ? `<div class="bd-fecha">${esc(fechaTxt)}</div>` : ''}
     <div class="bd-acts bd-acts-ic">

@@ -127,7 +127,24 @@
 .bd-chip.bd-chip-sinint:not(.active) { border-style: dashed; }
 .bd-nav-btn, .bd-exp .btn { min-height: 44px; }
 
+/* intención vacía: se dice, no se deja en guion */
+.bd-sinint { color: var(--pendiente-700); font-weight: 600; }
+/* celular: las herramientas en una sola fila deslizable (Validación primero) */
+@media (max-width: 640px) {
+  .bd-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .bd-nav::-webkit-scrollbar { height: 0; }
+  .bd-nav .bd-nav-btn { flex: 0 0 auto; padding: 0 14px; }
+  .bd-nav .bd-nav-val { order: -1; }
+}
+
+/* PC: Dashboard, Simulador, Votación y Validación en una sola fila */
+@media (min-width: 641px) {
+  .bd-nav { flex-wrap: nowrap; }
+  .bd-nav .bd-nav-btn { flex: 1 1 0; }
+}
+
 /* ---------- Modo oscuro ---------- */
+html.oscuro .bd-sinint { color: #FF9A5C; }
 html.oscuro .mc-marcador { background: #0B1626; border: 1px solid #2A3A4F; }
 html.oscuro .mc-cta { background: #FF9A5C; color: #0A1526; }
 html.oscuro .mc-t-pend { background: #3A2414; color: #FF9A5C; }
