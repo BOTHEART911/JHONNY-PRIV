@@ -50,6 +50,6 @@ html.oscuro .bd-chips-act2 { background: rgba(var(--brand-rgb), .12); }
 /* 12/11/2026 · Pendiente por eliminar (fallecido confirmado por el líder) */
 .bd-sello-elim { background: #FDE8E8; color: #991B1B; }
 .bd-chip.bd-chip-elim { color: #B91C1C; }
-.bd-chip.bd-chip-elim.active { background: #DC2626; color: #fff; box-shadow: 0 4px 12px rgba(220,38,38,.35); }
+.bd-chip.bd-chip-elim.active { background: #DC2626; color: #fff; box-shadow: 0 1px 2px rgba(10,37,64,.12); }
 .bd-chip-elim[hidden] { display: none; }
 :root[data-theme="dark"] .bd-sello-elim, html.oscuro .bd-sello-elim { background: #3B1414; color: #FCA5A5; }
