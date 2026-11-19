@@ -53,33 +53,22 @@ naranja `#FF9A5C`, verde `#4ADE80`.
 - Zonas táctiles ≥ 44 px; `aria-label` en botones de solo ícono.
 
 ## Movimiento (el efecto propio)
-- **El marcador rueda**: al abrir, las cifras suben una vez (`translateY` + opacidad,
-  280 ms, escalonadas 60 ms) y las barras avanzan (`scaleX`/`scaleY`, 600 ms).
-  Una sola vez por carga de página; los repintados (EN VIVO) no se animan.
 - Salida suave `--salida: cubic-bezier(.2,.8,.2,1)`. Nada con rebote.
 - Esqueletos que respiran (opacidad), nunca brillo que cruza.
 - Puntos que laten solo si algo está EN VIVO de verdad o el analista está pensando.
 - Todo con `prefers-reduced-motion: reduce` → sin animación.
 
-## Patrón de Inicio (JHONNY PRIV, `js/marcador.js` + `css/marcador.css`)
-1. Saludo y rol (como siempre).
-2. **Marcador** (fondo noche): firmes con el voto sobre activos y %, barra por intención,
-   No está seguro / No contactado / Sin preguntar / Nuevos del mes (cada uno abre la Base
-   de datos ya filtrada) y el botón naranja «Preguntar intención a N».
-3. **Piden tu acción**: por validar con la Registraduría, líderes sin activar, líderes con
-   menos de 10 (solo filas con algo pendiente).
-4. **Módulos** (las mismas baldosas; cada una con su ícono propio).
-5. **Análisis**: por puesto, registros por mes (mes en curso en naranja), líderes que más suman.
-En PC: marcador y acción lado a lado; análisis en 3 columnas.
+## Dinámica (en maqueta, 18/11/2026)
+Oscar descartó los tableros en el Inicio porque repiten lo que ya muestran otras vistas.
+La innovación va en **cómo se mueve y se usa la app**, no en agregar datos:
+navegación persistente (barra inferior en celular, riel lateral en PC), Inicio como lanzador
+(buscador único + «seguir donde ibas» + módulos), listas con acciones al deslizar y detalle
+lateral en PC, filtros que se recogen al bajar, transiciones con dirección, hojas
+arrastrables, botón Agregar flotante y guardado con deshacer.
 
-Sin rutas nuevas: usa `priv.baseDatos` (act=1) y `priv.lideres` de la misma caché de
-sesión (`rapCargar`, lecturas silenciosas en la cola de fondo). Si ya están en caché pinta
-al instante; si no, los módulos se pintan primero y el marcador llega después, dejando
-lista la Base de datos. Medición: `RED.pantalla('inicio.marcador[.cache|.red]')`.
-
-Filtros que llegan desde el Inicio: `window.BD_PRESET = { int: [''] }` o
-`{ chip: 'Por confirmar' }`; la Base de datos los aplica visibles (pastilla marcada).
-La intención vacía tiene pastilla propia: «Sin preguntar».
+Filtros que llegan a la Base de datos desde otra vista: `window.BD_PRESET = { int: [''] }` o
+`{ chip: 'Por confirmar' }`; se aplican visibles. La intención vacía tiene pastilla propia:
+«Sin preguntar».
 
 ## Prohibido
 Franja de color al borde izquierdo (o `::before`/`inset` que la imite), texto con

@@ -12,105 +12,9 @@
 .tile, .bd-card, .card, .lt-card { box-shadow: 0 1px 2px rgba(10,37,64,.06); }
 .tile { border: 1px solid rgba(10,37,64,.08); transition: transform .15s var(--salida), border-color .15s ease; }
 .tile:hover { border-color: rgba(var(--brand-rgb),.35); }
-.tile:focus-visible, .mc-fila:focus-visible, .mc-dato:focus-visible, .mc-cta:focus-visible, .mc-lid:focus-visible { outline: 3px solid rgba(var(--brand-rgb),.45); outline-offset: 2px; }
-.h1, .mc-n, .bd-chip-n, .dk > b { font-variant-numeric: tabular-nums; }
+.tile:focus-visible { outline: 3px solid rgba(var(--brand-rgb),.45); outline-offset: 2px; }
+.h1, .bd-chip-n, .dk > b { font-variant-numeric: tabular-nums; }
 .rol-badge.dev { background: var(--brand-900); color: #fff; box-shadow: none; }
-
-/* ---------- Inicio: marcador ---------- */
-.mc-top { display: grid; gap: 14px; margin: 4px 0 10px; }
-.mc-top:empty { display: none; }
-.mc-marcador { background: var(--brand-900); color: #fff; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-.mc-m-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mc-eyebrow { font-family: var(--font-display); font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #B9C9E0; }
-.mc-m-mas { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px 0 10px; border-radius: 10px; color: #fff; font-family: var(--font-display); font-weight: 600; font-size: 13px; background: transparent; }
-.mc-m-mas svg { width: 16px; height: 16px; }
-.mc-m-mas:hover { background: rgba(255,255,255,.08); }
-.mc-m-cifra { display: flex; align-items: flex-end; gap: 12px; }
-.mc-m-cifra > span { font-size: 13.5px; line-height: 1.35; color: #B9C9E0; padding-bottom: 6px; }
-.mc-n { font-family: var(--font-display); font-weight: 800; display: inline-block; }
-.mc-n-xl { font-size: 56px; line-height: .95; letter-spacing: -1px; }
-.mc-barra { height: 12px; border-radius: 999px; background: rgba(255,255,255,.14); overflow: hidden; display: flex; }
-.mc-barra i { display: block; height: 100%; transform-origin: left; }
-.mc-b-firme { background: #4ADE80; } .mc-b-duda { background: #FF9A5C; } .mc-b-nocont { background: #5AA9FF; }
-.mc-m-datos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.mc-dato { display: grid; grid-template-columns: 10px 1fr; column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; min-height: 52px; border-radius: 12px; background: rgba(255,255,255,.06); color: #fff; }
-.mc-dato:hover { background: rgba(255,255,255,.12); }
-.mc-dato b { font-size: 18px; grid-column: 2; }
-.mc-dato span { grid-column: 2; font-size: 12.5px; color: #B9C9E0; }
-.mc-pt { grid-row: 1 / span 2; width: 10px; height: 10px; border-radius: 3px; background: rgba(255,255,255,.35); }
-.mc-pt-duda { background: #FF9A5C; } .mc-pt-nocont { background: #5AA9FF; } .mc-pt-nuevo { background: #4ADE80; }
-.mc-m-nota { margin: 0; font-size: 12.5px; color: #B9C9E0; }
-.mc-cta { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 12px; background: var(--pendiente); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 15px; }
-.mc-cta:hover { background: var(--pendiente-700); }
-.mc-cta svg { width: 19px; height: 19px; }
-
-/* ---------- Inicio: piden tu acción ---------- */
-.mc-h { margin: 0 0 8px; font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--ink); }
-.mc-lista { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
-.mc-fila { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 14px; min-height: 64px; text-align: left; background: transparent; color: var(--ink); border-bottom: 1px solid var(--line); }
-.mc-fila:last-child { border-bottom: 0; }
-.mc-fila:hover { background: var(--bg); }
-.mc-fila > svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
-.mc-f-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none; }
-.mc-f-ic svg { width: 21px; height: 21px; }
-.mc-t-pend { background: var(--pendiente-050); color: var(--pendiente-700); }
-.mc-t-azul { background: var(--brand-050); color: var(--brand); }
-.mc-f-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.mc-f-tx b { font-family: var(--font-display); font-size: 14.5px; }
-.mc-f-tx span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-f-n { font-family: var(--font-display); font-weight: 800; font-size: 20px; }
-.mc-tn-pend { color: var(--pendiente-700); } .mc-tn-azul { color: var(--brand); }
-
-/* ---------- Inicio: análisis bajo los módulos ---------- */
-.mc-analisis { display: grid; gap: 14px; margin-top: 8px; }
-.mc-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-.mc-card .mc-h { margin: 0; }
-.mc-card-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mc-link { min-height: 44px; padding: 0 6px; font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--brand); background: transparent; }
-.mc-pu { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.mc-pu > span { display: flex; justify-content: space-between; gap: 8px; }
-.mc-pu > span > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-pu-t, .mc-lid-t { display: block; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
-.mc-pu-b, .mc-lid-t > i { display: block; height: 100%; border-radius: 999px; background: var(--brand); transform-origin: left; }
-.mc-pu-b.mc-bar-pend { background: var(--pendiente); } .mc-pu-b.mc-bar-gris { background: var(--muted); }
-.mc-lid-t { height: 6px; } .mc-lid-t > i { background: var(--firme); }
-.mc-cols { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; align-items: end; height: 170px; }
-.mc-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; }
-.mc-col b { font-size: 11.5px; font-weight: 700; }
-.mc-col i { display: block; width: 100%; border-radius: 6px 6px 2px 2px; background: var(--brand); transform-origin: bottom; }
-.mc-col span { font-size: 11.5px; color: var(--muted); }
-.mc-col-hoy i { background: var(--pendiente); }
-.mc-col-hoy b, .mc-col-hoy span { color: var(--pendiente-700); font-weight: 700; }
-.mc-lid { width: 100%; display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; min-height: 52px; text-align: left; background: transparent; color: var(--ink); border-bottom: 1px solid var(--line); }
-.mc-lid:last-child { border-bottom: 0; }
-.mc-lid-i { font-family: var(--font-display); font-weight: 700; color: var(--muted); }
-.mc-lid-tx { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.mc-lid-tx b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mc-lid-tx > span { font-size: 12px; color: var(--muted); }
-.mc-lid-n { font-family: var(--font-display); font-weight: 800; font-size: 17px; }
-
-/* ---------- esqueleto (respira, no cruza) ---------- */
-.mc-sk-m { gap: 12px; }
-.mc-sk { display: block; border-radius: 8px; background: rgba(255,255,255,.14); animation: mc-respira 1.4s ease-in-out infinite; }
-@keyframes mc-respira { 50% { opacity: .45; } }
-
-/* ---------- el efecto propio: el marcador rueda una vez ---------- */
-@keyframes mc-rueda { from { transform: translateY(55%); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes mc-avanza { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes mc-crece { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.mc-rueda { animation: mc-rueda .28s var(--salida) both; }
-.mc-r2 { animation-delay: .06s; } .mc-r3 { animation-delay: .12s; }
-.mc-avanza { animation: mc-avanza .6s var(--salida) .12s both; }
-.mc-crece { animation: mc-crece .5s var(--salida) .15s both; }
-@media (prefers-reduced-motion: reduce) { .mc-rueda, .mc-avanza, .mc-crece, .mc-sk { animation: none; } }
-
-/* ---------- PC: aprovechar el ancho ---------- */
-@media (min-width: 900px) {
-  .mc-top { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); align-items: start; }
-  .mc-m-datos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .mc-n-xl { font-size: 68px; }
-  .mc-analisis { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
-}
 
 /* ---------- Base de datos: el color de cada tarjeta se ve completo ---------- */
 /* El significado es el de siempre (municipio/estado); antes iba en una franja
@@ -145,12 +49,6 @@
 
 /* ---------- Modo oscuro ---------- */
 html.oscuro .bd-sinint { color: #FF9A5C; }
-html.oscuro .mc-marcador { background: #0B1626; border: 1px solid #2A3A4F; }
-html.oscuro .mc-cta { background: #FF9A5C; color: #0A1526; }
-html.oscuro .mc-t-pend { background: #3A2414; color: #FF9A5C; }
-html.oscuro .mc-tn-pend, html.oscuro .mc-col-hoy b, html.oscuro .mc-col-hoy span { color: #FF9A5C; }
-html.oscuro .mc-col-hoy i, html.oscuro .mc-pu-b.mc-bar-pend { background: #FF9A5C; }
-html.oscuro .mc-lid-t > i { background: #4ADE80; }
 html.oscuro .bd-card.bd-flandes, html.oscuro .bd-card.bd-sin, html.oscuro .bd-card.bd-espera,
 html.oscuro .bd-card.bd-confirmar, html.oscuro .bd-card.bd-otro { background: var(--surface); }
 html.oscuro .btn-primary, html.oscuro .bd-chip.active { color: #0A1526; }

@@ -832,7 +832,6 @@ function viewHome(user) {
         <h1 class="h1">Hola, ${esc(primerNombre(user.nombre))} 👋🏾</h1>
         <span class="rol-badge ${rol === 'DESARROLLADOR' ? 'dev' : rol === 'INVITADO' ? 'inv' : 'admin'}">${esc(rolLabel(rol))}</span>
       </div>
-      <div class="mc-top" id="mc-top"></div>   <!-- 18/11/2026 · Marcador (js/marcador.js) -->
       <p class="eyebrow" style="margin-top:6px;">Módulos</p>
       <div class="menu-grid">
         ${menu.map(m => {
@@ -844,11 +843,9 @@ function viewHome(user) {
           </button>`;
         }).join('')}
       </div>
-      <div id="mc-an"></div>
       <p class="center small muted" style="margin-top:10px;">${esc(MV.candidato)} · ${esc(MV.lugar)}</p>
     </div>`;
   app.hidden = false; hideSplash(); bindAppbar(user); appWide(true);   /* 23/07: Inicio tambien se expande en PC */
-  if (window.MARCADOR) MARCADOR.inicio(user);   /* 18/11/2026 · análisis a primera vista, de fondo y sin rutas nuevas */
   app.querySelectorAll('.tile:not(.soon)').forEach(t => t.onclick = () => openModulo(t.dataset.id, user));
   refrescarMiFoto(user);
 }
