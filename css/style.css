@@ -2741,3 +2741,10 @@ body.wide-xl .an-tabs { max-width: 640px; }
 .pcm-muerte input { margin-top: 2px; }
 :root[data-theme="dark"] .pcm-ic { background: #3A2A10; color: #FCD9A0; }
 .cfg-vp-d { font-size: .74rem; color: var(--muted); padding-left: 49px; line-height: 1.3; }
+
+/* ---------- Arrastre horizontal con el mouse (js/arrastre-x.js, 19/11/2026) ---------- */
+@media (pointer: fine) {
+  .ax-puede { cursor: grab; }
+  html.ax-arrastre, html.ax-arrastre * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+  .ax-arrastrando { scroll-behavior: auto; }
+}
