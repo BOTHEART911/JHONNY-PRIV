@@ -70,6 +70,11 @@ Filtros que llegan a la Base de datos desde otra vista: `window.BD_PRESET = { in
 `{ chip: 'Por confirmar' }`; se aplican visibles. La intención vacía tiene pastilla propia:
 «Sin preguntar».
 
+## Navegación rápida (19/11/2026, también en RONALD-PRIV)
+- Botón redondo con cuadrícula de 4 cuadros encima del robot de Insights (`js/nav-rapida.js` + `css/nav-rapida.css`): hoja inferior en celular, panel junto al botón en PC.
+- Inicio primero, módulos del menú (`menuParaRol` + `READY`) y un segundo grupo (Dashboard, Simulador, Votación, Tablero de líderes); todo filtrado con `permRuta`. Vista actual marcada. Cero viajes al servidor.
+- Sigue al robot si se arrastra, se encoge al bajar, se cierra fuera / arrastrando / Esc; no sale en login, instalar ni Inicio.
+
 ## Prohibido
 Franja de color al borde izquierdo (o `::before`/`inset` que la imite), texto con
 degradado, rebote, puntos que laten sin estar en vivo, brillo que cruza, resplandores de

@@ -1,0 +1,76 @@
+/* ============================================================================
+ * NAVEGACIÓN RÁPIDA ENTRE VISTAS (19/11/2026) — pareja de js/nav-rapida.js
+ * Solo variables del sistema (--surface, --ink, --line, --brand…): el modo
+ * oscuro lo voltea solo. Movimiento solo con transform/opacity.
+ * ========================================================================== */
+.navr-fab {
+  position: fixed; right: 16px; bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  z-index: 59; width: 50px; height: 50px; min-width: 44px; min-height: 44px;
+  display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: var(--surface); color: var(--brand);
+  box-shadow: var(--sh-2); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform .18s cubic-bezier(.2,.8,.2,1), opacity .18s ease;
+}
+.navr-fab svg { width: 22px; height: 22px; }
+.navr-fab:hover { transform: translateY(-2px); }
+.navr-fab:active { transform: scale(.96); }
+.navr-fab:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.navr-fab[aria-expanded="true"] { background: var(--brand); color: #fff; border-color: var(--brand); }
+.navr-fab.navr-tapado { opacity: 0; pointer-events: none; }
+.navr-fab.navr-chico { transform: scale(.78); opacity: .9; }
+
+.navr-wrap { position: fixed; inset: 0; z-index: 58; }
+.navr-fondo { position: absolute; inset: 0; background: rgba(10, 25, 45, .32); opacity: 0; transition: opacity .2s ease; }
+.navr-pc .navr-fondo { background: transparent; }
+.navr-hoja {
+  position: absolute; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--sh-2);
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .2s ease;
+  display: flex; flex-direction: column; overscroll-behavior: contain;
+}
+.navr-on .navr-fondo { opacity: 1; }
+
+/* celular: hoja inferior */
+.navr-movil .navr-hoja {
+  left: 0; right: 0; bottom: 0; max-height: 82dvh;
+  border-radius: 22px 22px 0 0; border-bottom: 0;
+  padding: 6px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%); touch-action: pan-y;
+}
+.navr-movil.navr-on .navr-hoja { transform: translateY(0); }
+.navr-asa { width: 40px; height: 5px; border-radius: 99px; background: var(--line); margin: 6px auto 8px; flex: none; }
+.navr-cuerpo { overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
+
+/* PC: panel junto al botón */
+.navr-pc .navr-hoja { width: 460px; max-height: min(600px, calc(100vh - 90px)); border-radius: 18px; padding: 12px 12px 14px; opacity: 0; transform: translateY(6px) scale(.98); transform-origin: bottom right; }
+.navr-pc.navr-on .navr-hoja { opacity: 1; transform: none; }
+.navr-pc .navr-asa { display: none; }
+
+.navr-tit { margin: 2px 4px 8px; font-family: var(--font-display), var(--font-body); font-weight: 700; font-size: 15px; color: var(--ink); }
+.navr-sub { margin: 12px 4px 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.navr-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.navr-pc .navr-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.navr-it {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 76px; padding: 10px 6px; border-radius: 14px;
+  border: 1px solid transparent; background: transparent; color: var(--ink);
+  font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.navr-it:hover { background: var(--brand-050); }
+.navr-it:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.navr-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-050); color: var(--brand); }
+.navr-ic svg { width: 21px; height: 21px; }
+.navr-tx { overflow-wrap: anywhere; }
+.navr-it.navr-aqui { border-color: var(--brand); background: var(--brand-050); }
+.navr-it.navr-aqui .navr-ic { background: var(--brand); color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .navr-fab, .navr-hoja, .navr-fondo { transition: none; }
+  .navr-fab:hover, .navr-fab.navr-tapado { opacity: 0; pointer-events: none; }
+.navr-fab.navr-chico { transform: none; }
+}
+html.oscuro .navr-fab[aria-expanded="true"], html.oscuro .navr-it.navr-aqui .navr-ic { color: #0A1526; }
+html.oscuro .navr-fondo { background: rgba(0, 0, 0, .5); }
+html.oscuro .navr-pc .navr-fondo { background: transparent; }

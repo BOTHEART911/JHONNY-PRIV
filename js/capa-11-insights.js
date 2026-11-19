@@ -162,7 +162,12 @@
     if (pidiendoEstado) return pidiendoEstado;
     pidiendoEstado = api('priv.iaEstado', { caller: yo() }, 'GET', null, { silent: true })
       .then(function (r) { estado = (r && r.ok !== false) ? r : { configurada: false }; return estado; })
-      .catch(function () { estado = { configurada: false, error: true }; return estado; })
+      .catch(function (err) {
+        /* 19/11/2026 · cortada por cambiar de vista: no se anota (si no, el robot
+           quedaba escondido toda la sesión); la siguiente vista lo vuelve a pedir */
+        if (err && err.cortado) return { configurada: false, cortado: true };
+        estado = { configurada: false, error: true }; return estado;
+      })
       .then(function (e) { pidiendoEstado = null; return e; });
     return pidiendoEstado;
   }

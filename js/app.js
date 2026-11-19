@@ -847,7 +847,47 @@ function viewHome(user) {
     </div>`;
   app.hidden = false; hideSplash(); bindAppbar(user); appWide(true);   /* 23/07: Inicio tambien se expande en PC */
   app.querySelectorAll('.tile:not(.soon)').forEach(t => t.onclick = () => openModulo(t.dataset.id, user));
-  refrescarMiFoto(user);
+  /* 19/11/2026 · velocidad: el perfil se refresca a lo sumo cada 10 min (antes
+     en CADA entrada al Inicio, un viaje que competía con la vista siguiente) y
+     las listas se precargan de fondo para que la primera visita sea al instante. */
+  if (perfilToca(user)) refrescarMiFoto(user);
+  precargarListas(user);
+}
+
+function perfilToca(user) {
+  const k = nsKey('priv_perfil_t:' + (user.documento || '')), ahora = Date.now();
+  let t = 0; try { t = Number(sessionStorage.getItem(k) || 0); } catch (e) {}
+  if (t && ahora - t < 600000) return false;
+  try { sessionStorage.setItem(k, String(ahora)); } catch (e) {}
+  return true;
+}
+
+/* 19/11/2026 · precarga de fondo desde el Inicio (cola de red.js: máx. 2 a la
+   vez, detrás de lo de primer plano; se descarta si se cambia de vista y la
+   nueva vista hereda la misma lectura si ya va en vuelo). Solo lo que el rol
+   puede ver y solo lo que aún no está en la caché de la sesión. */
+let PRECARGA_T = null;
+function precargarListas(user) {
+  clearTimeout(PRECARGA_T);
+  PRECARGA_T = setTimeout(async () => {
+    if (!getActive() || (location.hash.replace(/^#\//, '') || 'home').split('?')[0] !== 'home') return;
+    const doc = user.documento;
+    RAP.setUsuario(doc);
+    const lista = [
+      ['bd', 'priv.baseDatos', { caller: doc, act: '1' }],
+      ['lideres', 'priv.lideres', { caller: doc }],
+      ['compromisos', 'priv.compromisos', { caller: doc }]
+    ];
+    const tareas = [];
+    for (const [ruta, accion, prm] of lista) {
+      if (!permRuta(ruta) || RAP.tomar(accion) || await RAP.revivir(accion)) continue;
+      tareas.push(rapTraer(accion, Object.assign({}, prm, RAP.params()), SILENCIO)
+        .then(d => { if (d && d.ok !== false && !d.__copia && !RAP.tomar(accion)) RAP.guardar(accion, d, d.__rapCrudo || d); })
+        .catch(() => {}));
+    }
+    if (permRuta('agenda') && AG_LISTA !== doc) tareas.push(agTraer(doc, SILENCIO).catch(() => {}));
+    await Promise.all(tareas);
+  }, 700);
 }
 
 /* Trae la foto de la hoja si la sesión guardada no la tiene todavía (venía de
@@ -5571,7 +5611,8 @@ let AG_ESTRICTA = true, AG_ESDEV = false;
    AQUÍ (el cliente ya tiene las reuniones y las horas) y se mandan directo
    (WhatsApp del cliente) o por bot (endpoint que resuelve el destino).
    ============================================================ */
-let AG_NOTIF = null;
+let AG_NOTIF = null, AG_NOTIF_T = 0;
+let AG_LISTA = '', AG_LISTA_T = 0;   /* 19/11/2026 · documento dueño de AG_ALL (lista ya cargada en esta sesión) */
 
 /* Íconos propios (no están en el set I): sol saliendo, sol, luna, aviso. */
 const AG_SVG = {
@@ -5588,7 +5629,8 @@ const AG_FRANJAS = {
 };
 
 async function agNotifCargar() {
-  try { AG_NOTIF = await api('priv.agendaMeta', m5Auth()); }
+  if (AG_NOTIF && Date.now() - AG_NOTIF_T < 600000) return;   /* 19/11/2026 · una vez cada 10 min, no en cada entrada */
+  try { AG_NOTIF = await api('priv.agendaMeta', m5Auth(), 'GET', null, SILENCIO); AG_NOTIF_T = Date.now(); }
   catch (e) { AG_NOTIF = null; }
 }
 
@@ -5999,9 +6041,18 @@ async function viewAgenda(user) {
   const q = $('#ag-q'); let t; q.oninput = () => { clearTimeout(t); t = setTimeout(() => { AG_Q = q.value.trim().toLowerCase(); agRender(); }, 180); };
   $$('#ag-notif .ag-notif-ic').forEach(b => b.onclick = () => agResumenModal(b.dataset.f));
   agNotifCargar();   // AJUSTE 20/07: candidato + plantillas para las notificaciones
-  try { const r = await api('priv.agenda', m5Auth()); AG_ALL = (r && r.items) || []; AG_ESTRICTA = !(r && r.estricta === false); AG_ESDEV = !!(r && r.esDev); }
-  catch (e) { $('#ag-cal').innerHTML = `${fallaHtml(e)}`; return; }
-  agRender();
+  /* 19/11/2026 · volver a Agenda pinta al instante con la lista de la sesión y
+     la refresca de fondo (antes: 2 viajes de 3-5 s en cada entrada). */
+  if (AG_LISTA === user.documento) {
+    agRender();
+    if (Date.now() - AG_LISTA_T < 60000) { /* recién traída (o precargada): EN VIVO avisa si cambia */ }
+    else { const antes = JSON.stringify(AG_ALL);
+    agTraer(user.documento, SILENCIO).then(() => { if ($('#ag-cal') && JSON.stringify(AG_ALL) !== antes) agRender(); }).catch(() => {}); }
+  } else {
+    try { await agTraer(user.documento); }
+    catch (e) { $('#ag-cal').innerHTML = `${fallaHtml(e)}`; return; }
+    agRender();
+  }
 
   vivoBind('agenda', M5_ME, vivoAgenda);   // EN VIVO
 }
@@ -6009,6 +6060,13 @@ async function viewAgenda(user) {
 /* ---- EN VIVO · Agenda ----
    Se respeta dónde está parado el usuario: agRender() repinta el mismo mes/día
    y la misma búsqueda (AG_CUR, AG_VIEW y AG_Q no se tocan). */
+async function agTraer(doc, op) {
+  const r = await api('priv.agenda', { caller: doc }, 'GET', null, op || {});
+  if (!r || r.ok === false) { if (!op) throw new Error((r && r.msg) || 'No se pudo cargar la agenda'); return r; }
+  AG_ALL = r.items || []; AG_ESTRICTA = r.estricta !== false; AG_ESDEV = !!r.esDev; AG_LISTA = doc; AG_LISTA_T = Date.now();
+  return r;
+}
+
 async function vivoAgenda(rev) {
   const r = await api('priv.agenda', m5Auth(), 'GET', null, SILENCIO);
   const items = (r && r.items) || [];
